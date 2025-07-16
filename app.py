@@ -72,7 +72,7 @@ def TAC():
 
         # GPT 호출
         response = openai.ChatCompletion.create(
-            model="gpt-4",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": "수산자원관리법 전문가처럼 대답하세요."},
                 {"role": "user", "content": prompt}
@@ -103,4 +103,3 @@ def TAC():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-=======
