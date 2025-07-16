@@ -2,26 +2,27 @@ from flask import Flask, request, jsonify
 import openai
 import os
 
-app = Flask(__name__)
-
-# 환경변수에서 API 키 읽기
+# 환경변수에서 API 키 로드
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
+app = Flask(__name__)
+
+# 기본 시스템 프롬프트 및 컨텍스트 정의
 context = """
 당신은 한국의 수산자원관리법 전문가입니다. 아래 내용을 바탕으로 사용자 질문에 답해주세요.
 
 [요약]
-[제1조] 목적 – 수산자원의 보호·회복·조성 등 관리 및 어업인의 소득증대 목적
-[제2조] 정의 – 수산자원, 총허용어획량, 수산자원조성, 바다목장 정의
-[제3조] 수산자원의 조사·연구 – 정부가 자원 상태 조사 책임
-[제4조] 수산자원 조성 – 어초·해조장 설치 및 종자 방류 등 조성 가능
-[제5조] 허가·등록 – 어업활동을 위한 허가/등록 절차 규정
-[제6조] 허가 조건 – 허가 시 어업 방식·장비·어획량 조건 명시 가능
-[제7조] 조업 금지 구역 – 어업 종류별 금지구역 예: 외끌이·트롤어업
-[제8조] 휴어기 설정 – 자원 상태 등 고려하여 설정 가능
-[제9조] 어장 안전관리 – 안전사고 예방 규정
-[제10조] 어업 질서 유지 – 자원 보호와 질서 확립에 부합하도록 규제
-[제11조] 정밀조사·평가 계획 – 자원 현황 평가 및 회복계획 수립 의무
+[제1조] 목적 – 수산자원의 보호·회복·조성 등 관리 및 어업인의 소득증대 목적
+[제2조] 정의 – 수산자원, 총허용어획량, 수산자원조성, 바다목장 정의
+[제3조] 수산자원의 조사·연구 – 정부가 자원 상태 조사 책임
+[제4조] 수산자원 조성 – 어초·해조장 설치 및 종자 방류 등 조성 가능
+[제5조] 허가·등록 – 어업활동을 위한 허가/등록 절차 규정
+[제6조] 허가 조건 – 허가 시 어업 방식·장비·어획량 조건 명시 가능
+[제7조] 조업 금지 구역 – 어업 종류별 금지구역 예: 외끌이·트롤어업
+[제8조] 휴어기 설정 – 자원 상태 등 고려하여 설정 가능
+[제9조] 어장 안전관리 – 안전사고 예방 규정
+[제10조] 어업 질서 유지 – 자원 보호와 질서 확립에 부합하도록 규제
+[제11조] 정밀조사·평가 계획 – 자원 현황 평가 및 회복계획 수립 의무
 [제12조] 어획물 등의 조사  
 ① 해수부장관 또는 시·도지사는 시장·공판장·어선 등에 출입하여 어획물 종류·어획량 등을 조사할 수 있다.  
 ② 조사 관원은 신분증명서를 지니고 제시해야 하며, 승선조사 전 어선주와 사전 협의해야 한다.
@@ -68,23 +69,26 @@ def TAC():
         if not user_input:
             raise ValueError("입력이 비어 있습니다.")
 
-        prompt = context + f"\n\n질문: {user_input}\n답변:"
+        # 메시지 구성
+        messages = [
+            {"role": "system", "content": "당신은 수산자원관리법 전문가입니다. 질문에 정확하고 간결하게 답변하세요."},
+            {"role": "user", "content": context + f"\n\n질문: {user_input}\n답변:"}
+        ]
 
+        # OpenAI API 호출
         response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "수산자원관리법 전문가처럼 대답하세요."},
-                {"role": "user", "content": prompt}
-            ],
+            messages=messages,
             temperature=0.3,
-            max_tokens=300,
+            max_tokens=500
         )
 
         answer = response.choices[0].message.content.strip()
 
     except Exception as e:
-        print(f"[오류] {e}")
-        answer = "죄송합니다. 현재 AI 응답 생성에 문제가 발생했습니다. 잠시 후 다시 시도해주세요."
+        import traceback
+        traceback.print_exc()
+        answer = f"오류 발생: {str(e)}"
 
     return jsonify({
         "version": "2.0",
