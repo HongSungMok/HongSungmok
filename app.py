@@ -3,15 +3,11 @@ import openai
 import os
 
 # 환경변수에서 API 키 읽기
-
 print("OPENAI_API_KEY:", os.environ.get("OPENAI_API_KEY"))
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
-response = openai.chat.completions.create(
-    model="gpt-3.5-turbo",
-    messages=[{"role":"user","content":"Hello"}]
-)
-print(response.choices[0].message.content)
+app = Flask(__name__)
+
 context = """
 당신은 한국의 수산자원관리법 전문가입니다. 아래 내용을 바탕으로 사용자 질문에 답해주세요.
 
@@ -75,7 +71,7 @@ def TAC():
 
         prompt = context + f"\n\n질문: {user_input}\n답변:"
 
-        response = openai.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",  # 원하는 모델로 변경 가능
             messages=[
                 {"role": "system", "content": "수산자원관리법 전문가처럼 대답하세요."},
