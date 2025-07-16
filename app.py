@@ -1,7 +1,9 @@
 from flask import Flask, request, jsonify
 import openai
+import os
 
-openai.api_key = "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"  # 자신의 OpenAI API 키로 교체하세요
+# ✅ 보안: API 키는 환경 변수에서 불러오기 (Render에 설정 필요)
+openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 app = Flask(__name__)
 
@@ -72,14 +74,14 @@ def TAC():
 
         # GPT 호출
         response = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model="gpt-3.5-turbo",  # ✅ 더 빠르고 저렴한 모델로 변경
             messages=[
                 {"role": "system", "content": "수산자원관리법 전문가처럼 대답하세요."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
             max_tokens=300,
-            timeout=7  # ✅ 응답 지연 방지용 타임아웃
+            timeout=20  # ✅ 타임아웃 여유 있게
         )
 
         # 응답 결과
