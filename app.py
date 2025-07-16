@@ -2,8 +2,10 @@ from flask import Flask, request, jsonify
 import openai
 import os
 
-# ✅ 보안: API 키는 환경 변수에서 불러오기 (Render에 설정 필요)
+# 환경변수에서 API 키 읽기
 openai.api_key = os.environ.get("OPENAI_API_KEY")
+
+print(f"API KEY loaded: {'Yes' if openai.api_key else 'No'}")  # Render 로그에 출력됨 (테스트용)
 
 app = Flask(__name__)
 
@@ -74,22 +76,22 @@ def TAC():
 
         # GPT 호출
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # ✅ 더 빠르고 저렴한 모델로 변경
+            model="gpt-3.5-turbo",  # 원하는 모델로 변경 가능
             messages=[
                 {"role": "system", "content": "수산자원관리법 전문가처럼 대답하세요."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
             max_tokens=300,
-            timeout=20  # ✅ 타임아웃 여유 있게
+            timeout=20  # 타임아웃 여유 있게 설정
         )
 
         # 응답 결과
         answer = response.choices[0].message.content.strip()
 
     except Exception as e:
-        print(f"[오류] {e}")  # Render 로그 확인용
-        answer = "죄송합니다. 현재 AI 응답 생성에 문제가 발생했습니다. 잠시 후 다시 시도해주세요."
+        print(f"[오류] {e}")  # Render 로그에서 에러 확인용
+        answer = f"오류 발생: {str(e)}"  # 카카오톡 응답에 에러 메시지 포함(테스트용)
 
     # 카카오톡 형식 응답
     return jsonify({
