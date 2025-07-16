@@ -2,11 +2,10 @@ from flask import Flask, request, jsonify
 import openai
 import os
 
-# 환경변수에서 API 키 읽기
-print("OPENAI_API_KEY:", os.environ.get("OPENAI_API_KEY"))
-openai.api_key = os.environ.get("OPENAI_API_KEY")
-
 app = Flask(__name__)
+
+# 환경변수에서 API 키 읽기
+openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 context = """
 당신은 한국의 수산자원관리법 전문가입니다. 아래 내용을 바탕으로 사용자 질문에 답해주세요.
@@ -71,8 +70,8 @@ def TAC():
 
         prompt = context + f"\n\n질문: {user_input}\n답변:"
 
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # 원하는 모델로 변경 가능
+        response = openai.chat.completions.create(
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "수산자원관리법 전문가처럼 대답하세요."},
                 {"role": "user", "content": prompt}
@@ -85,7 +84,7 @@ def TAC():
 
     except Exception as e:
         print(f"[오류] {e}")
-        answer = f"오류 발생: {str(e)}"
+        answer = "죄송합니다. 현재 AI 응답 생성에 문제가 발생했습니다. 잠시 후 다시 시도해주세요."
 
     return jsonify({
         "version": "2.0",
