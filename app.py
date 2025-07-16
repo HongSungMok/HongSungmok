@@ -5,7 +5,7 @@ import os
 # 환경변수에서 API 키 읽기
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
-print(f"API KEY loaded: {'Yes' if openai.api_key else 'No'}")  # Render 로그에 출력됨 (테스트용)
+print(f"API KEY loaded: {'Yes' if openai.api_key else 'No'}")  # 로그 출력 (테스트용)
 
 app = Flask(__name__)
 
@@ -66,16 +66,13 @@ context = """
 @app.route("/TAC", methods=["POST"])
 def TAC():
     try:
-        # 사용자 발화 가져오기
         user_input = request.json.get("userRequest", {}).get("utterance", "")
         if not user_input:
             raise ValueError("입력이 비어 있습니다.")
 
-        # 프롬프트 구성
         prompt = context + f"\n\n질문: {user_input}\n답변:"
 
-        # GPT 호출
-        response = openai.ChatCompletion.create(
+        response = openai.chat.completions.create(
             model="gpt-3.5-turbo",  # 원하는 모델로 변경 가능
             messages=[
                 {"role": "system", "content": "수산자원관리법 전문가처럼 대답하세요."},
@@ -83,17 +80,14 @@ def TAC():
             ],
             temperature=0.3,
             max_tokens=300,
-            timeout=20  # 타임아웃 여유 있게 설정
         )
 
-        # 응답 결과
         answer = response.choices[0].message.content.strip()
 
     except Exception as e:
-        print(f"[오류] {e}")  # Render 로그에서 에러 확인용
-        answer = f"오류 발생: {str(e)}"  # 카카오톡 응답에 에러 메시지 포함(테스트용)
+        print(f"[오류] {e}")
+        answer = f"오류 발생: {str(e)}"
 
-    # 카카오톡 형식 응답
     return jsonify({
         "version": "2.0",
         "template": {
