@@ -74,16 +74,18 @@ def call_openrouter_api(messages):
         "temperature": 0.3,
         "max_tokens": 500
     }
-    response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload)
-    response.raise_for_status()
-    return response.json()["choices"][0]["message"]["content"]
-
-def get_fish_info_summary():
-    lines = []
-    for fish, info in fish_data.items():
-        line = f"{fish} - 금어기: {info['금어기'] or '없음'}, 금지체장: {info['금지체장'] or '없음'}"
-        lines.append(line)
-    return "\n".join(lines)
+    try:
+        response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        # 응답 데이터 구조 점검
+        if isinstance(data, dict) and "choices" in data:
+            return data["choices"][0]["message"]["content"]
+        else:
+            # API가 예상과 다른 구조를 반환하면 에러 메시지 출력
+            return f"API 응답 형식 오류: {data}"
+    except Exception as e:
+        return f"API 호출 중 오류 발생: {str(e)}"
 
 @app.route("/TAC", methods=["POST"])
 def TAC():
@@ -98,11 +100,9 @@ def TAC():
                 }
             })
 
-        fish_info_text = get_fish_info_summary()
-
         messages = [
-            {"role": "system", "content": "당신은 한국 수산자원관리법 전문가입니다. 아래 법 조문과 어종 정보를 참고하여 정확하고 간결하게 답변해주세요.\n\n" + context + "\n\n어종별 금어기 및 금지체장 정보:\n" + fish_info_text},
-            {"role": "user", "content": f"질문: {user_input}\n답변:"}
+            {"role": "system", "content": "당신은 수산자원관리법 전문가입니다. 질문에 정확하고 간결하게 답변하세요."},
+            {"role": "user", "content": context + f"\n\n질문: {user_input}\n답변:"}
         ]
 
         answer = call_openrouter_api(messages)
