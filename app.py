@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import os
 import requests
 import traceback
+from fish_data import fish_data
 
 app = Flask(__name__)
 
@@ -9,10 +10,8 @@ app = Flask(__name__)
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# 수산자원관리법 전문가 컨텍스트
+# 법 조문 전문 및 요약 (주신 내용)
 context = """
-당신은 한국의 수산자원관리법 전문가입니다. 아래 내용을 바탕으로 사용자 질문에 답변해주세요.
-
 [요약]
 [제1조] 목적 – 수산자원의 보호·회복·조성 등 관리 및 어업인의 소득증대 목적
 [제2조] 정의 – 수산자원, 총허용어획량, 수산자원조성, 바다목장 정의
@@ -79,6 +78,13 @@ def call_openrouter_api(messages):
     response.raise_for_status()
     return response.json()["choices"][0]["message"]["content"]
 
+def get_fish_info_summary():
+    lines = []
+    for fish, info in fish_data.items():
+        line = f"{fish} - 금어기: {info['금어기'] or '없음'}, 금지체장: {info['금지체장'] or '없음'}"
+        lines.append(line)
+    return "\n".join(lines)
+
 @app.route("/TAC", methods=["POST"])
 def TAC():
     try:
@@ -92,9 +98,11 @@ def TAC():
                 }
             })
 
+        fish_info_text = get_fish_info_summary()
+
         messages = [
-            {"role": "system", "content": "당신은 수산자원관리법 전문가입니다. 질문에 정확하고 간결하게 답변하세요."},
-            {"role": "user", "content": context + f"\n\n질문: {user_input}\n답변:"}
+            {"role": "system", "content": "당신은 한국 수산자원관리법 전문가입니다. 아래 법 조문과 어종 정보를 참고하여 정확하고 간결하게 답변해주세요.\n\n" + context + "\n\n어종별 금어기 및 금지체장 정보:\n" + fish_info_text},
+            {"role": "user", "content": f"질문: {user_input}\n답변:"}
         ]
 
         answer = call_openrouter_api(messages)
