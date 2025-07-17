@@ -1,4 +1,4 @@
-frofrom flask import Flask, request, jsonify
+from flask import Flask, request, jsonify
 import os
 import requests
 import traceback
