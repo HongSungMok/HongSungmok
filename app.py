@@ -79,9 +79,10 @@ def call_openrouter_api(messages):
         if isinstance(data, dict) and "choices" in data:
             return data["choices"][0]["message"]["content"]
         else:
-            return f"[API 응답 오류] {data}"
+            return "[API 응답 오류]"
     except Exception as e:
-        return f"[API 호출 오류] {str(e)}"
+        print(f"API 호출 오류: {e}")
+        return "[API 호출 오류가 발생했습니다.]"
 
 @app.route("/TAC", methods=["POST"])
 def TAC():
@@ -118,11 +119,14 @@ def TAC():
                 answer = "\n".join(parts)
 
             else:
-                messages = [
-                    {"role": "system", "content": "당신은 수산자원관리법 전문가입니다. 질문에 정확하고 간결하게 답변하세요."},
-                    {"role": "user", "content": context + f"\n\n질문: {user_input}\n답변:"}
-                ]
-                answer = call_openrouter_api(messages)
+                if not OPENROUTER_API_KEY:
+                    answer = "서버 환경 변수에 OPENROUTER_API_KEY가 설정되어 있지 않습니다."
+                else:
+                    messages = [
+                        {"role": "system", "content": "당신은 수산자원관리법 전문가입니다. 질문에 정확하고 간결하게 답변하세요."},
+                        {"role": "user", "content": context + f"\n\n질문: {user_input}\n답변:"}
+                    ]
+                    answer = call_openrouter_api(messages)
 
     except Exception:
         traceback.print_exc()
