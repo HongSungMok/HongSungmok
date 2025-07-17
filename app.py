@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 import os
 import requests
 import traceback
-from fish_data import fish_data  # fish_data가 dict형태로 정의된 파일
+from fish_data import fish_data  # fish_data는 dict 형태로 {'참조기': {...}, '갈치': {...}} 식
 
 app = Flask(__name__)
 
@@ -93,8 +93,8 @@ def TAC():
             answer = "입력이 비어 있습니다. 질문을 입력해주세요."
 
         else:
-            # fish_data가 dict이면 아래처럼
             matched_info = None
+            fish_key = None
             for fish_name, info in fish_data.items():
                 if fish_name in user_input:
                     matched_info = info
@@ -103,20 +103,21 @@ def TAC():
 
             if matched_info:
                 parts = [f"{fish_key} 정보입니다."]
-                if "금어기" in matched_info:
-                    parts.append(f"금어기: {matched_info['금어기']}")
-                if "금지체장" in matched_info:
-                    parts.append(f"금지체장: {matched_info['금지체장']}")
-                if "금지체중" in matched_info:
-                    parts.append(f"금지체중: {matched_info['금지체중']}")
-                if "예외사항" in matched_info:
-                    parts.append(f"예외사항: {matched_info['예외사항']}")
-                if "적용지역" in matched_info:
-                    parts.append(f"적용지역: {matched_info['적용지역']}")
+                if "ban_period" in matched_info:
+                    parts.append(f"금어기: {matched_info['ban_period']}")
+                if "min_size_cm" in matched_info:
+                    parts.append(f"금지체장: {matched_info['min_size_cm']}cm 이상")
+                if "min_weight_g" in matched_info:
+                    parts.append(f"금지체중: {matched_info['min_weight_g']}g 이상")
+                if "exception" in matched_info:
+                    parts.append(f"예외사항: {matched_info['exception']}")
+                if "region" in matched_info:
+                    parts.append(f"적용지역: {matched_info['region']}")
+                if "condition" in matched_info:
+                    parts.append(f"조건: {matched_info['condition']}")
                 answer = "\n".join(parts)
 
             else:
-                # fish_data에 없는 경우 OpenRouter API 호출
                 messages = [
                     {"role": "system", "content": "당신은 수산자원관리법 전문가입니다. 질문에 정확하고 간결하게 답변하세요."},
                     {"role": "user", "content": context + f"\n\n질문: {user_input}\n답변:"}
