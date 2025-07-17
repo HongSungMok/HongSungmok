@@ -1,15 +1,17 @@
 from flask import Flask, request, jsonify
-import openai
 import os
-
-# 환경변수에서 API 키 로드
-openai.api_key = os.environ.get("OPENAI_API_KEY")
+import requests
+import traceback
 
 app = Flask(__name__)
 
-# 기본 시스템 프롬프트 및 컨텍스트 정의
+# OpenRouter API 키 환경변수에서 읽기
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+# 수산자원관리법 전문가 컨텍스트 (기존 내용 유지)
 context = """
-당신은 한국의 수산자원관리법 전문가입니다. 아래 내용을 바탕으로 사용자 질문에 답해주세요.
+당신은 한국의 수산자원관리법 전문가입니다. 아래 내용을 바탕으로 사용자 질문에 답변해주세요.
 
 [요약]
 [제1조] 목적 – 수산자원의 보호·회복·조성 등 관리 및 어업인의 소득증대 목적
@@ -52,7 +54,7 @@ context = """
 [제65조] 1천만 원 이하 벌금:
 • 조업금지구역 어업(제15조 위반)  
 • 비어업인의 금지 포획(제18조 위반)  
-• 2중 자망 무단 사용(제23조 제3항 위반)  
+• 2중 자망 무단 사용(제23조 3항 위반)  
 • 금지 어구 제작·판매·보관(제24조 위반) 등
 
 [제66조] 500만 원 이하 벌금:
@@ -62,44 +64,52 @@ context = """
 • 불법 어획물 방류명령 불이행, 허위 보고, 지정 외 거래 등
 """
 
+def call_openrouter_api(messages):
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "gpt-3.5-turbo",
+        "messages": messages,
+        "temperature": 0.3,
+        "max_tokens": 500
+    }
+    response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload)
+    response.raise_for_status()
+    return response.json()["choices"][0]["message"]["content"]
+
 @app.route("/TAC", methods=["POST"])
 def TAC():
     try:
-        user_input = request.json.get("userRequest", {}).get("utterance", "")
+        data = request.json
+        user_input = data.get("userRequest", {}).get("utterance", "").strip()
         if not user_input:
-            raise ValueError("입력이 비어 있습니다.")
+            return jsonify({
+                "version": "2.0",
+                "template": {
+                    "outputs": [{"simpleText": {"text": "입력이 비어 있습니다. 질문을 입력해주세요."}}]
+                }
+            })
 
-        # 메시지 구성
         messages = [
             {"role": "system", "content": "당신은 수산자원관리법 전문가입니다. 질문에 정확하고 간결하게 답변하세요."},
             {"role": "user", "content": context + f"\n\n질문: {user_input}\n답변:"}
         ]
 
-        # OpenAI API 호출
-        response = openai.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            temperature=0.3,
-            max_tokens=500
-        )
-
-        answer = response.choices[0].message.content.strip()
+        answer = call_openrouter_api(messages)
 
     except Exception as e:
-        import traceback
         traceback.print_exc()
         answer = f"오류 발생: {str(e)}"
 
     return jsonify({
         "version": "2.0",
         "template": {
-            "outputs": [{
-                "simpleText": {
-                    "text": answer
-                }
-            }]
+            "outputs": [{"simpleText": {"text": answer}}]
         }
     })
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
