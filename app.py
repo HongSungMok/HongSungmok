@@ -72,17 +72,15 @@ def call_openrouter_api(messages):
         "model": "gpt-3.5-turbo",
         "messages": messages,
         "temperature": 0.3,
-        "max_tokens": 500
+        "max_tokens": 300
     }
     try:
         response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload)
         response.raise_for_status()
         data = response.json()
-        # 응답 데이터 구조 점검
         if isinstance(data, dict) and "choices" in data:
             return data["choices"][0]["message"]["content"]
         else:
-            # API가 예상과 다른 구조를 반환하면 에러 메시지 출력
             return f"API 응답 형식 오류: {data}"
     except Exception as e:
         return f"API 호출 중 오류 발생: {str(e)}"
@@ -100,6 +98,23 @@ def TAC():
                 }
             })
 
+        # 금어기/금지체장에 해당하는 어종 있는지 우선 체크
+        for fish_name, info in fish_data.items():
+            if fish_name in user_input:
+                response_parts = []
+                if info.get("금어기"):
+                    response_parts.append(f"[{fish_name}]의 금어기는 {info['금어기']}입니다.")
+                if info.get("금지체장"):
+                    response_parts.append(f"[{fish_name}]의 금지체장은 {info['금지체장']}입니다.")
+                if response_parts:
+                    return jsonify({
+                        "version": "2.0",
+                        "template": {
+                            "outputs": [{"simpleText": {"text": "\n".join(response_parts)}}]
+                        }
+                    })
+
+        # fish_data에 해당 없으면 OpenRouter API 호출
         messages = [
             {"role": "system", "content": "당신은 수산자원관리법 전문가입니다. 질문에 정확하고 간결하게 답변하세요."},
             {"role": "user", "content": context + f"\n\n질문: {user_input}\n답변:"}
