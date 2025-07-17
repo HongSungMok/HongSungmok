@@ -1,16 +1,14 @@
-from flask import Flask, request, jsonify
+frofrom flask import Flask, request, jsonify
 import os
 import requests
 import traceback
-from fish_data import fish_data
+from fish_data import fish_data  # fish_data가 dict형태로 정의된 파일
 
 app = Flask(__name__)
 
-# OpenRouter API 키 환경변수에서 읽기
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# 법 조문 전문 및 요약 (주신 내용)
 context = """
 [요약]
 [제1조] 목적 – 수산자원의 보호·회복·조성 등 관리 및 어업인의 소득증대 목적
@@ -95,18 +93,30 @@ def TAC():
             answer = "입력이 비어 있습니다. 질문을 입력해주세요."
 
         else:
-            # 어종 정보가 있는 경우 fish_data에서 응답
+            # fish_data가 dict이면 아래처럼
+            matched_info = None
             for fish_name, info in fish_data.items():
                 if fish_name in user_input:
-                    parts = []
-                    if info.get("금어기"):
-                        parts.append(f"금어기: {info['금어기']}")
-                    if info.get("금지체장"):
-                        parts.append(f"금지 체장: {info['금지체장']}")
-                    answer = f"{fish_name} 정보입니다.\n" + "\n".join(parts)
+                    matched_info = info
+                    fish_key = fish_name
                     break
+
+            if matched_info:
+                parts = [f"{fish_key} 정보입니다."]
+                if "금어기" in matched_info:
+                    parts.append(f"금어기: {matched_info['금어기']}")
+                if "금지체장" in matched_info:
+                    parts.append(f"금지체장: {matched_info['금지체장']}")
+                if "금지체중" in matched_info:
+                    parts.append(f"금지체중: {matched_info['금지체중']}")
+                if "예외사항" in matched_info:
+                    parts.append(f"예외사항: {matched_info['예외사항']}")
+                if "적용지역" in matched_info:
+                    parts.append(f"적용지역: {matched_info['적용지역']}")
+                answer = "\n".join(parts)
+
             else:
-                # fish_data에 없는 경우 OpenRouter로 질문
+                # fish_data에 없는 경우 OpenRouter API 호출
                 messages = [
                     {"role": "system", "content": "당신은 수산자원관리법 전문가입니다. 질문에 정확하고 간결하게 답변하세요."},
                     {"role": "user", "content": context + f"\n\n질문: {user_input}\n답변:"}
@@ -117,7 +127,6 @@ def TAC():
         traceback.print_exc()
         answer = "오류가 발생했습니다. 질문을 다시 입력해 주세요."
 
-    # 카카오 i 오픈빌더 스킬 JSON 스키마 형식으로 응답
     return jsonify({
         "version": "2.0",
         "template": {
