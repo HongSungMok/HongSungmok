@@ -9,7 +9,7 @@ app = Flask(__name__)
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# 수산자원관리법 전문가 컨텍스트 (기존 내용 유지)
+# 수산자원관리법 전문가 컨텍스트
 context = """
 당신은 한국의 수산자원관리법 전문가입니다. 아래 내용을 바탕으로 사용자 질문에 답변해주세요.
 
