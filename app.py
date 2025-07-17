@@ -81,55 +81,53 @@ def call_openrouter_api(messages):
         if isinstance(data, dict) and "choices" in data:
             return data["choices"][0]["message"]["content"]
         else:
-            return f"API 응답 형식 오류: {data}"
+            return f"[API 응답 오류] {data}"
     except Exception as e:
-        return f"API 호출 중 오류 발생: {str(e)}"
+        return f"[API 호출 오류] {str(e)}"
 
 @app.route("/TAC", methods=["POST"])
 def TAC():
     try:
         data = request.json
         user_input = data.get("userRequest", {}).get("utterance", "").strip()
+
         if not user_input:
-            return jsonify({
-                "version": "2.0",
-                "template": {
-                    "outputs": [{"simpleText": {"text": "입력이 비어 있습니다. 질문을 입력해주세요."}}]
-                }
-            })
+            answer = "입력이 비어 있습니다. 질문을 입력해주세요."
 
-        # 금어기/금지체장에 해당하는 어종 있는지 우선 체크
-        for fish_name, info in fish_data.items():
-            if fish_name in user_input:
-                response_parts = []
-                if info.get("금어기"):
-                    response_parts.append(f"[{fish_name}]의 금어기는 {info['금어기']}입니다.")
-                if info.get("금지체장"):
-                    response_parts.append(f"[{fish_name}]의 금지체장은 {info['금지체장']}입니다.")
-                if response_parts:
-                    return jsonify({
-                        "version": "2.0",
-                        "template": {
-                            "outputs": [{"simpleText": {"text": "\n".join(response_parts)}}]
-                        }
-                    })
+        else:
+            # 어종 정보가 있는 경우 fish_data에서 응답
+            for fish_name, info in fish_data.items():
+                if fish_name in user_input:
+                    parts = []
+                    if info.get("금어기"):
+                        parts.append(f"금어기: {info['금어기']}")
+                    if info.get("금지체장"):
+                        parts.append(f"금지 체장: {info['금지체장']}")
+                    answer = f"{fish_name} 정보입니다.\n" + "\n".join(parts)
+                    break
+            else:
+                # fish_data에 없는 경우 OpenRouter로 질문
+                messages = [
+                    {"role": "system", "content": "당신은 수산자원관리법 전문가입니다. 질문에 정확하고 간결하게 답변하세요."},
+                    {"role": "user", "content": context + f"\n\n질문: {user_input}\n답변:"}
+                ]
+                answer = call_openrouter_api(messages)
 
-        # fish_data에 해당 없으면 OpenRouter API 호출
-        messages = [
-            {"role": "system", "content": "당신은 수산자원관리법 전문가입니다. 질문에 정확하고 간결하게 답변하세요."},
-            {"role": "user", "content": context + f"\n\n질문: {user_input}\n답변:"}
-        ]
-
-        answer = call_openrouter_api(messages)
-
-    except Exception as e:
+    except Exception:
         traceback.print_exc()
-        answer = f"오류 발생: {str(e)}"
+        answer = "오류가 발생했습니다. 질문을 다시 입력해 주세요."
 
+    # 카카오 i 오픈빌더 스킬 JSON 스키마 형식으로 응답
     return jsonify({
         "version": "2.0",
         "template": {
-            "outputs": [{"simpleText": {"text": answer}}]
+            "outputs": [
+                {
+                    "simpleText": {
+                        "text": answer
+                    }
+                }
+            ]
         }
     })
 
