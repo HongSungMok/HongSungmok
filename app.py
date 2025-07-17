@@ -88,12 +88,12 @@ def call_openrouter_api(messages):
 def TAC():
     try:
         data = request.json
-        user_input = data.get("userRequest", {}).get("utterance", "").strip()
-
-        if not user_input:
+        user_input = data.get("userRequest", {}).get("utterance", "")
+        if not user_input or not isinstance(user_input, str) or user_input.strip() == "":
             answer = "입력이 비어 있습니다. 질문을 입력해주세요."
-
         else:
+            user_input = user_input.strip()
+
             matched_info = None
             fish_key = None
             for fish_name, info in fish_data.items():
@@ -104,20 +104,18 @@ def TAC():
 
             if matched_info:
                 parts = [f"{fish_key} 정보입니다."]
-                if "ban_period" in matched_info:
-                    parts.append(f"금어기: {matched_info['ban_period']}")
-                if "min_size_cm" in matched_info:
-                    parts.append(f"금지체장: {matched_info['min_size_cm']}cm 이상")
-                if "min_weight_g" in matched_info:
-                    parts.append(f"금지체중: {matched_info['min_weight_g']}g 이상")
-                if "exception" in matched_info:
-                    parts.append(f"예외사항: {matched_info['exception']}")
-                if "region" in matched_info:
-                    parts.append(f"적용지역: {matched_info['region']}")
-                if "condition" in matched_info:
-                    parts.append(f"조건: {matched_info['condition']}")
-                answer = "\n".join(parts)
 
+                def format_value(val):
+                    if isinstance(val, dict):
+                        # dict면 key: value 쌍을 줄바꿈으로 연결
+                        return "\n".join(f"{k}: {v}" for k, v in val.items())
+                    return str(val)
+
+                for key in ["금어기", "금지체장", "금지체중", "예외사항", "적용지역", "조건", "선택적 금어기"]:
+                    if key in matched_info:
+                        parts.append(f"{key}: {format_value(matched_info[key])}")
+
+                answer = "\n".join(parts)
             else:
                 if not OPENROUTER_API_KEY:
                     answer = "서버 환경 변수에 OPENROUTER_API_KEY가 설정되어 있지 않습니다."
@@ -132,6 +130,18 @@ def TAC():
         traceback.print_exc()
         answer = "오류가 발생했습니다. 질문을 다시 입력해 주세요."
 
+    # answer를 문자열로 강제 변환
+    if not isinstance(answer, str):
+        answer = str(answer)
+
+    # 너무 길면 1900자까지 자르기 (카카오톡 메시지 제한 여유)
+    if len(answer) > 1900:
+        answer = answer[:1900] + "\n\n[답변이 너무 길어 일부만 표시합니다.]"
+
+    # 빈 문자열 방지
+    if answer.strip() == "":
+        answer = "답변이 없습니다."
+
     return jsonify({
         "version": "2.0",
         "template": {
@@ -144,7 +154,3 @@ def TAC():
             ]
         }
     })
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
