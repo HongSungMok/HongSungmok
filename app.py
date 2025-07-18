@@ -107,7 +107,6 @@ def TAC():
 
                 def format_value(val):
                     if isinstance(val, dict):
-                        # dict면 key: value 쌍을 줄바꿈으로 연결
                         return "\n".join(f"{k}: {v}" for k, v in val.items())
                     return str(val)
 
@@ -130,15 +129,12 @@ def TAC():
         traceback.print_exc()
         answer = "오류가 발생했습니다. 질문을 다시 입력해 주세요."
 
-    # answer를 문자열로 강제 변환
     if not isinstance(answer, str):
         answer = str(answer)
 
-    # 너무 길면 1900자까지 자르기 (카카오톡 메시지 제한 여유)
     if len(answer) > 1900:
         answer = answer[:1900] + "\n\n[답변이 너무 길어 일부만 표시합니다.]"
 
-    # 빈 문자열 방지
     if answer.strip() == "":
         answer = "답변이 없습니다."
 
@@ -154,3 +150,7 @@ def TAC():
             ]
         }
     })
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
