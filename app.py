@@ -112,7 +112,10 @@ def TAC():
 
                 for key in ["금어기", "금지체장", "금지체중", "예외사항", "적용지역", "조건", "선택적 금어기"]:
                     if key in matched_info:
-                        parts.append(f"{key}: {format_value(matched_info[key])}")
+                        val = matched_info[key]
+                        if val is None:
+                            val = "정보 없음"
+                        parts.append(f"{key}: {format_value(val)}")
 
                 answer = "\n".join(parts)
             else:
@@ -125,18 +128,23 @@ def TAC():
                     ]
                     answer = call_openrouter_api(messages)
 
+        # 강제로 문자열 변환
+        answer = str(answer)
+
+        # 너무 길면 잘라서 카카오톡 메시지 제한 맞춤
+        if len(answer) > 1900:
+            answer = answer[:1900] + "\n\n[답변이 너무 길어 일부만 표시합니다.]"
+
+        # 빈 문자열 방지
+        if answer.strip() == "":
+            answer = "답변이 없습니다."
+
     except Exception:
         traceback.print_exc()
         answer = "오류가 발생했습니다. 질문을 다시 입력해 주세요."
 
-    if not isinstance(answer, str):
-        answer = str(answer)
-
-    if len(answer) > 1900:
-        answer = answer[:1900] + "\n\n[답변이 너무 길어 일부만 표시합니다.]"
-
-    if answer.strip() == "":
-        answer = "답변이 없습니다."
+    # 최종 JSON 스키마 확인용 출력 (디버깅용, 운영 시 제거)
+    # print("응답 텍스트:", answer)
 
     return jsonify({
         "version": "2.0",
