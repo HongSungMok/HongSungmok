@@ -73,8 +73,10 @@ def call_openrouter_api(messages):
         response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload)
         response.raise_for_status()
         data = response.json()
-        if isinstance(data, dict) and "choices" in data:
-            return data["choices"][0]["message"]["content"]
+        if isinstance(data, dict) and "choices" in data and data["choices"]:
+            content = data["choices"][0]["message"]["content"]
+            # 반드시 문자열로 변환
+            return str(content) if content is not None else "[API 응답 내용 없음]"
         else:
             return "[API 응답 오류]"
     except Exception as e:
@@ -83,17 +85,19 @@ def call_openrouter_api(messages):
 
 def format_value(val):
     if isinstance(val, dict):
+        # 딕셔너리는 key: value 문자열 목록으로 변환
         return "\n".join(f"- {k}: {v}" for k, v in val.items())
     elif isinstance(val, list):
-        if len(val) > 0 and isinstance(val[0], dict):
-            lines = []
-            for item in val:
-                line = ", ".join(f"{k}: {v}" for k, v in item.items())
-                lines.append(f"- {line}")
-            return "\n".join(lines)
-        else:
-            return "\n".join(f"- {item}" for item in val)
-    return str(val)
+        lines = []
+        for item in val:
+            if isinstance(item, dict):
+                # 예: [{"지역": "...", "기간": "..."}, ...]
+                lines.append(", ".join(f"{k}: {v}" for k, v in item.items()))
+            else:
+                lines.append(str(item))
+        return "\n".join(f"- {line}" for line in lines)
+    else:
+        return str(val)
 
 @app.route("/TAC", methods=["POST"])
 def TAC():
@@ -106,6 +110,7 @@ def TAC():
         else:
             matched_info = None
             fish_key = None
+
             for fish_name, info in fish_data.items():
                 if fish_name in user_input:
                     matched_info = info
@@ -114,25 +119,41 @@ def TAC():
 
             if matched_info:
                 parts = [f"[{fish_key} 정보]\n"]
-                for key in ["금어기", "금지체장", "금지체중", "예외사항", "적용지역", "조건", "선택적 금어기"]:
+
+                keys_to_show = [
+                    "금어기", "금지체장", "금지체중",
+                    "예외사항", "적용지역", "조건", "선택적 금어기"
+                ]
+
+                for key in keys_to_show:
                     if key in matched_info:
                         val = matched_info[key]
                         if val is None:
                             val = "정보 없음"
                         parts.append(f"{key}:\n{format_value(val)}")
+
                 answer = "\n\n".join(parts)
             else:
                 if not OPENROUTER_API_KEY:
                     answer = "서버 환경 변수에 OPENROUTER_API_KEY가 설정되어 있지 않습니다."
                 else:
                     messages = [
-                        {"role": "system", "content": "당신은 수산자원관리법 전문가입니다. 질문에 정확하고 간결하게 답변하세요."},
-                        {"role": "user", "content": context + f"\n\n질문: {user_input}\n답변:"}
+                        {
+                            "role": "system",
+                            "content": "당신은 수산자원관리법 전문가입니다. 질문에 정확하고 간결하게 답변하세요."
+                        },
+                        {
+                            "role": "user",
+                            "content": context + f"\n\n질문: {user_input}\n답변:"
+                        }
                     ]
                     answer = call_openrouter_api(messages)
 
-        answer = str(answer)
+        # answer가 반드시 문자열이 되도록 최종 보장
+        if not isinstance(answer, str):
+            answer = str(answer)
 
+        # 답변 길이 제한 (카카오톡 메시지 최대 길이 대응)
         if len(answer) > 1900:
             answer = answer[:1900] + "\n\n[답변이 너무 길어 일부만 표시합니다.]"
 
@@ -156,6 +177,7 @@ def TAC():
 
     except Exception:
         traceback.print_exc()
+        # 예외 발생 시에도 카카오톡 스키마 맞춤
         return jsonify({
             "version": "2.0",
             "template": {
