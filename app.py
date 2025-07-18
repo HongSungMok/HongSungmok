@@ -88,12 +88,11 @@ def call_openrouter_api(messages):
 def TAC():
     try:
         data = request.json
-        user_input = data.get("userRequest", {}).get("utterance", "")
-        if not user_input or not isinstance(user_input, str) or user_input.strip() == "":
+        user_input = data.get("userRequest", {}).get("utterance", "").strip()
+
+        if not user_input:
             answer = "입력이 비어 있습니다. 질문을 입력해주세요."
         else:
-            user_input = user_input.strip()
-
             matched_info = None
             fish_key = None
             for fish_name, info in fish_data.items():
@@ -128,36 +127,44 @@ def TAC():
                     ]
                     answer = call_openrouter_api(messages)
 
-        # 강제로 문자열 변환
         answer = str(answer)
 
-        # 너무 길면 잘라서 카카오톡 메시지 제한 맞춤
         if len(answer) > 1900:
             answer = answer[:1900] + "\n\n[답변이 너무 길어 일부만 표시합니다.]"
 
-        # 빈 문자열 방지
-        if answer.strip() == "":
+        if not answer.strip():
             answer = "답변이 없습니다."
+
+        response_json = {
+            "version": "2.0",
+            "template": {
+                "outputs": [
+                    {
+                        "simpleText": {
+                            "text": answer
+                        }
+                    }
+                ]
+            }
+        }
+
+        print("응답 JSON 스키마:", response_json)
+        return jsonify(response_json)
 
     except Exception:
         traceback.print_exc()
-        answer = "오류가 발생했습니다. 질문을 다시 입력해 주세요."
-
-    # 최종 JSON 스키마 확인용 출력 (디버깅용, 운영 시 제거)
-    # print("응답 텍스트:", answer)
-
-    return jsonify({
-        "version": "2.0",
-        "template": {
-            "outputs": [
-                {
-                    "simpleText": {
-                        "text": answer
+        return jsonify({
+            "version": "2.0",
+            "template": {
+                "outputs": [
+                    {
+                        "simpleText": {
+                            "text": "오류가 발생했습니다. 다시 시도해주세요."
+                        }
                     }
-                }
-            ]
-        }
-    })
+                ]
+            }
+        })
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
