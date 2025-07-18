@@ -1,3 +1,9 @@
+<<<<<<< HEAD
 flask
 requests
 gunicorn
+=======
+flask
+requests
+gunicorn
+>>>>>>> e5e1d0d4b0351bac732314ec0af3d1a10c89466d
