@@ -1,3 +1,4 @@
+from datetime import datetime
 from flask import Flask, request, jsonify
 import os
 import requests
@@ -58,6 +59,85 @@ context = """
  • 불법 어획물 방류명령 불이행, 허위 보고, 지정 외 거래 등
 """
 
+# 날짜 범위 검사 함수
+def is_date_in_range(period: str, today: datetime) -> bool:
+    try:
+        start_str, end_str = period.split("~")
+        start_month, start_day = map(int, start_str.split("."))
+        if "익년" in end_str:
+            end_str = end_str.replace("익년", "")
+            end_month, end_day = map(int, end_str.strip().split("."))
+            start_date = datetime(today.year, start_month, start_day)
+            end_date = datetime(today.year + 1, end_month, end_day)
+        else:
+            end_month, end_day = map(int, end_str.strip().split("."))
+            start_date = datetime(today.year, start_month, start_day)
+            end_date = datetime(today.year, end_month, end_day)
+        return start_date <= today <= end_date
+    except Exception:
+        return False
+
+# 금어기 기간 필터링
+def filter_periods(periods, today):
+    if isinstance(periods, dict):
+        valid_periods = {}
+        for key, period in periods.items():
+            if is_date_in_range(period, today):
+                valid_periods[key] = period
+        return valid_periods if valid_periods else None
+    elif isinstance(periods, str):
+        return periods if is_date_in_range(periods, today) else None
+    return None
+
+# 어종 정보 반환 함수
+def get_fish_info(fish_name, fish_data, today=None):
+    if today is None:
+        today = datetime.today()
+
+    fish = fish_data.get(fish_name)
+    if not fish:
+        return f"'{fish_name}'에 대한 정보가 없습니다."
+
+    # 금어기 필터링
+    금어기 = None
+    for key in ["금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기", "지역별_금어기", "금어기_예외"]:
+        if key in fish:
+            filtered = filter_periods(fish[key], today)
+            if filtered:
+                if isinstance(filtered, dict):
+                    금어기 = "; ".join(f"{k}: {v}" for k, v in filtered.items())
+                else:
+                    금어기 = filtered
+                break
+    if not 금어기:
+        금어기 = "없음"
+
+    # 금지체장 필터링
+    금지체장 = None
+    if "금지체장" in fish:
+        금지체장 = fish["금지체장"]
+        if isinstance(금지체장, dict):
+            if "기본" in 금지체장:
+                금지체장 = 금지체장["기본"]
+            else:
+                금지체장 = list(금지체장.values())[0]
+    else:
+        금지체장 = "없음"
+    if not 금지체장:
+        금지체장 = "없음"
+
+    # 예외사항 및 포획비율 제한 정보
+    예외사항 = fish.get("금어기_해역_특이사항") or fish.get("금어기_예외") or fish.get("금어기_특정해역") or fish.get("금어기_추가")
+    포획비율 = fish.get("포획비율제한")
+
+    response = f"금어기: {금어기}\n금지체장: {금지체장}"
+    if 예외사항:
+        response += f"\n예외사항: {예외사항}"
+    if 포획비율:
+        response += f"\n포획비율제한: {포획비율}"
+    return response
+
+# OpenRouter API 호출 함수
 def call_openrouter_api(messages):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -82,6 +162,7 @@ def call_openrouter_api(messages):
         print(f"API 호출 오류: {e}")
         return "[API 호출 오류가 발생했습니다.]"
 
+# 값 포맷팅 함수
 def format_value(val):
     if isinstance(val, dict):
         return "\n".join(f"- {k}: {v}" for k, v in val.items())
@@ -112,42 +193,24 @@ def TAC():
             answer = "입력이 비어 있습니다. 질문을 입력해주세요."
             quick_replies = []
         else:
-            matched_info = None
             fish_key = None
-
-            for fish_name, info in fish_data.items():
-                if fish_name in user_input:
-                    matched_info = info
-                    fish_key = fish_name
+            for name in fish_data.keys():
+                if name in user_input:
+                    fish_key = name
                     break
 
-            if matched_info:
-                parts = [f"[{fish_key} 정보]\n"]
-
-                keys_to_show = [
-                    "금어기", "금지체장", "금지체중",
-                    "예외사항", "적용지역", "조건", "선택적 금어기"
-                ]
-
-                for key in keys_to_show:
-                    if key in matched_info:
-                        val = matched_info[key]
-                        if val is None:
-                            val = "정보 없음"
-                        parts.append(f"{key}:\n{format_value(val)}")
-
-                answer = "\n\n".join(parts)
-
-                # 주요 어종 중 현재 질문 어종 제외하고 버튼 생성
+            if fish_key:
+                # get_fish_info 호출
+                answer = f"[{fish_key} 정보]\n\n" + get_fish_info(fish_key, fish_data)
+                # 버튼 생성 (주요 어종 중 현재 어종 제외)
                 quick_replies = [
                     {
                         "messageText": f"{name} 금어기",
                         "action": "message",
-                        "label": f"{name} 금어기"
+                        "label": name
                     }
                     for name in 주요_어종 if name != fish_key
                 ]
-
             else:
                 if not OPENROUTER_API_KEY:
                     answer = "서버 환경 변수에 OPENROUTER_API_KEY가 설정되어 있지 않습니다."
@@ -188,7 +251,6 @@ def TAC():
                 "quickReplies": quick_replies
             }
         }
-
         return jsonify(response_json)
 
     except Exception:
