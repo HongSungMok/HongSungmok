@@ -227,14 +227,14 @@ def TAC():
                 info_text = get_fish_info(matched_fish, fish_data)
 
                 # 이모지 + [ 어종명 ] 포맷
-                answer = f"{emoji} [ {matched_fish} ] {emoji}\n\n{info_text}"
+                answer = f"{emoji}{matched_fish}{emoji}\n\n{info_text}"
 
                 # 주요 어종 중 현재 선택 제외 버튼 생성
                 quick_replies = [
                     {
-                        "messageText": f"{name} 금어기",
+                        "messageText": f"{name} ",
                         "action": "message",
-                        "label": f"{name} 금어기"
+                        "label": f"{name} "
                     }
                     for name in 주요_어종 if name != matched_fish
                 ]
