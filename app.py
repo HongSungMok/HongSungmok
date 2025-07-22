@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 import os
 import requests
 import traceback
-from fish_data import fish_data  # fish_data는 dict 형태로 {'참조기': {...}, '갈치': {...}} 식
+from fish_data import fish_data  # fish_data는 dict 형태
 
 app = Flask(__name__)
 
@@ -75,7 +75,6 @@ def call_openrouter_api(messages):
         data = response.json()
         if isinstance(data, dict) and "choices" in data and data["choices"]:
             content = data["choices"][0]["message"]["content"]
-            # 반드시 문자열로 변환
             return str(content) if content is not None else "[API 응답 내용 없음]"
         else:
             return "[API 응답 오류]"
@@ -85,13 +84,11 @@ def call_openrouter_api(messages):
 
 def format_value(val):
     if isinstance(val, dict):
-        # 딕셔너리는 key: value 문자열 목록으로 변환
         return "\n".join(f"- {k}: {v}" for k, v in val.items())
     elif isinstance(val, list):
         lines = []
         for item in val:
             if isinstance(item, dict):
-                # 예: [{"지역": "...", "기간": "..."}, ...]
                 lines.append(", ".join(f"{k}: {v}" for k, v in item.items()))
             else:
                 lines.append(str(item))
@@ -105,8 +102,15 @@ def TAC():
         data = request.json
         user_input = data.get("userRequest", {}).get("utterance", "").strip()
 
+        주요_어종 = [
+            "고등어", "전갱이", "삼치", "갈치", "도루묵",
+            "참조기", "오징어", "대게", "붉은대게", "제주소라",
+            "꽃게", "참홍어", "키조개", "개조개", "바지락"
+        ]
+
         if not user_input:
             answer = "입력이 비어 있습니다. 질문을 입력해주세요."
+            quick_replies = []
         else:
             matched_info = None
             fish_key = None
@@ -133,9 +137,21 @@ def TAC():
                         parts.append(f"{key}:\n{format_value(val)}")
 
                 answer = "\n\n".join(parts)
+
+                # 주요 어종 중 현재 질문 어종 제외하고 버튼 생성
+                quick_replies = [
+                    {
+                        "messageText": f"{name} 금어기",
+                        "action": "message",
+                        "label": f"{name} 금어기"
+                    }
+                    for name in 주요_어종 if name != fish_key
+                ]
+
             else:
                 if not OPENROUTER_API_KEY:
                     answer = "서버 환경 변수에 OPENROUTER_API_KEY가 설정되어 있지 않습니다."
+                    quick_replies = []
                 else:
                     messages = [
                         {
@@ -148,12 +164,11 @@ def TAC():
                         }
                     ]
                     answer = call_openrouter_api(messages)
+                    quick_replies = []
 
-        # answer가 반드시 문자열이 되도록 최종 보장
         if not isinstance(answer, str):
             answer = str(answer)
 
-        # 답변 길이 제한 (카카오톡 메시지 최대 길이 대응)
         if len(answer) > 1900:
             answer = answer[:1900] + "\n\n[답변이 너무 길어 일부만 표시합니다.]"
 
@@ -169,7 +184,8 @@ def TAC():
                             "text": answer
                         }
                     }
-                ]
+                ],
+                "quickReplies": quick_replies
             }
         }
 
@@ -177,7 +193,6 @@ def TAC():
 
     except Exception:
         traceback.print_exc()
-        # 예외 발생 시에도 카카오톡 스키마 맞춤
         return jsonify({
             "version": "2.0",
             "template": {
