@@ -98,7 +98,6 @@ def get_fish_info(fish_name, fish_data, today=None):
     if not fish:
         return f"'{fish_name}'에 대한 정보가 없습니다."
 
-    # 금어기 필터링
     금어기 = None
     for key in ["금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기", "지역별_금어기", "금어기_예외"]:
         if key in fish:
@@ -109,10 +108,16 @@ def get_fish_info(fish_name, fish_data, today=None):
                 else:
                     금어기 = filtered
                 break
+            else:
+                if isinstance(fish[key], str):
+                    금어기 = fish[key]
+                    break
+                elif isinstance(fish[key], dict):
+                    금어기 = "; ".join(f"{k}: {v}" for k, v in fish[key].items())
+                    break
     if not 금어기:
         금어기 = "없음"
 
-    # 금지체장 필터링
     금지체장 = None
     if "금지체장" in fish:
         금지체장 = fish["금지체장"]
@@ -126,16 +131,16 @@ def get_fish_info(fish_name, fish_data, today=None):
     if not 금지체장:
         금지체장 = "없음"
 
-    # 예외사항 및 포획비율 제한 정보
     예외사항 = fish.get("금어기_해역_특이사항") or fish.get("금어기_예외") or fish.get("금어기_특정해역") or fish.get("금어기_추가")
     포획비율 = fish.get("포획비율제한")
 
-    response = f"금어기: {금어기}\n금지체장: {금지체장}"
+    response = f"🚫 금어기: {금어기}\n🚫 금지체장: {금지체장}"
     if 예외사항:
-        response += f"\n예외사항: {예외사항}"
+        response += f"\n⚠️ 예외사항: {예외사항}"
     if 포획비율:
-        response += f"\n포획비율제한: {포획비율}"
+        response += f"\n⚠️ 포획비율제한: {포획비율}"
     return response
+
 
 # OpenRouter API 호출 함수
 def call_openrouter_api(messages):
@@ -177,6 +182,18 @@ def format_value(val):
     else:
         return str(val)
 
+# 어종별 이모지 매핑
+fish_emojis = {
+    "고등어": "🐟",
+    "문어": "🐙",
+    "오징어": "🦑",
+    "게": "🦀",
+    "갈치": "🐠",
+    "김": "🍀",
+    "우뭇가사리": "🌿",
+    # 필요하면 추가 어종 및 해조류 이모지 여기에 넣으세요
+}
+
 @app.route("/TAC", methods=["POST"])
 def TAC():
     try:
@@ -186,32 +203,43 @@ def TAC():
         주요_어종 = [
             "고등어", "전갱이", "삼치", "갈치", "도루묵",
             "참조기", "오징어", "대게", "붉은대게", "제주소라",
-            "꽃게", "참홍어", "키조개", "개조개", "바지락"
+            "꽃게", "참홍어", "키조개", "개조개", "바지락",
+            "김", "우뭇가사리"
         ]
 
         if not user_input:
             answer = "입력이 비어 있습니다. 질문을 입력해주세요."
             quick_replies = []
         else:
+            matched_fish = None
             fish_key = None
-            for name in fish_data.keys():
-                if name in user_input:
-                    fish_key = name
+
+            # 입력에서 어종명 포함 여부 확인
+            for fish_name in fish_data.keys():
+                if fish_name in user_input:
+                    matched_fish = fish_name
                     break
 
-            if fish_key:
-                # get_fish_info 호출
-                answer = f"[{fish_key} 정보]\n\n" + get_fish_info(fish_key, fish_data)
-                # 버튼 생성 (주요 어종 중 현재 어종 제외)
+            if matched_fish:
+                emoji = fish_emojis.get(matched_fish, "🐟")  # 기본 물고기 이모지
+
+                # get_fish_info 함수 호출
+                info_text = get_fish_info(matched_fish, fish_data)
+
+                # 이모지 + [ 어종명 ] 포맷
+                answer = f"{emoji} [ {matched_fish} ] {emoji}\n\n{info_text}"
+
+                # 주요 어종 중 현재 선택 제외 버튼 생성
                 quick_replies = [
                     {
                         "messageText": f"{name} 금어기",
                         "action": "message",
-                        "label": name
+                        "label": f"{name} 금어기"
                     }
-                    for name in 주요_어종 if name != fish_key
+                    for name in 주요_어종 if name != matched_fish
                 ]
             else:
+                # OpenRouter API 호출 (예: 법령 질문 등)
                 if not OPENROUTER_API_KEY:
                     answer = "서버 환경 변수에 OPENROUTER_API_KEY가 설정되어 있지 않습니다."
                     quick_replies = []
@@ -251,6 +279,7 @@ def TAC():
                 "quickReplies": quick_replies
             }
         }
+
         return jsonify(response_json)
 
     except Exception:
@@ -267,6 +296,30 @@ def TAC():
                 ]
             }
         })
+
+def call_openrouter_api(messages):
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "gpt-3.5-turbo",
+        "messages": messages,
+        "temperature": 0.3,
+        "max_tokens": 300
+    }
+    try:
+        response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        if isinstance(data, dict) and "choices" in data and data["choices"]:
+            content = data["choices"][0]["message"]["content"]
+            return str(content) if content is not None else "[API 응답 내용 없음]"
+        else:
+            return "[API 응답 오류]"
+    except Exception as e:
+        print(f"API 호출 오류: {e}")
+        return "[API 호출 오류가 발생했습니다.]"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
