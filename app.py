@@ -12,8 +12,15 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 fish_emojis = {
-    "고등어": "\U0001F41F", "문어": "\U0001F419", "오징어": "\U0001F991", "게": "\U0001F980",
-    "갈치": "\U0001F420", "김": "\U0001F340", "우뭇가사리": "\U0001F33F"
+    "갈치": "🐟",
+    "참조기": "🐠",
+    "말쥐치": "🐡",
+    "대게": "🦀",
+    "붉은대게": "🦞",
+    "오분자기": "🐚",
+    "키조개": "🦪",
+    "주꾸미": "🦑",
+    "해삼": "🌊"
 }
 
 
@@ -96,11 +103,10 @@ def filter_periods(periods, today):
         return periods if is_date_in_range(periods, today) else None
     return None
 
-# 특정 월 또는 오늘 금어기 어종 반환
+# 금어기 중인 어종 반환
 def get_fishes_in_season(fish_data, today=None):
     if today is None:
         today = datetime.today()
-
     in_season_fishes = []
     for fish_name, fish_info in fish_data.items():
         for key in ["금어기", "지역별_금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기"]:
@@ -144,6 +150,7 @@ def get_fish_info(fish_name, fish_data, today=None):
         response += f"\n⚠️ 포획비율제한: {포획비율}"
     return response
 
+# 메인 엔드포인트
 @app.route("/TAC", methods=["POST"])
 def TAC():
     try:
@@ -154,7 +161,7 @@ def TAC():
         if not user_input:
             answer, quick_replies = "입력이 비어 있습니다.", []
 
-        elif "오늘" in user_input or "지금" in user_input  or "현재" in user_input:
+        elif any(x in user_input for x in ["오늘", "지금", "현재"]) and "금어기" in user_input:
             fishes = get_fishes_in_season(fish_data)
             if fishes:
                 quick_replies = [{"label": f, "messageText": f, "action": "message"} for f in fishes]
@@ -177,7 +184,7 @@ def TAC():
                 answer, quick_replies = "월 정보를 인식하지 못했습니다.", []
 
         else:
-            matched_fish = next((name for name in fish_data if name in user_input), None)
+            matched_fish = next((name for name in fish_data if name == user_input), None)
             if matched_fish:
                 emoji = fish_emojis.get(matched_fish, "\U0001F41F")
                 info_text = get_fish_info(matched_fish, fish_data)
