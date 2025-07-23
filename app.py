@@ -148,7 +148,7 @@ def get_fish_info(fish_name, fish_data, today=None):
 def extract_fish_name(user_input, fish_names):
     user_input_proc = user_input.replace(" ", "").lower()
     for name in fish_names:
-        if name.replace(" ", "").lower() in user_input_proc:
+        if name.replace(" ", "").lower() == user_input_proc:
             logging.info(f"Detected fish name: {name}")
             return name
     logging.info("No fish name detected")
@@ -166,7 +166,6 @@ def TAC():
         if not user_input:
             answer, quick_replies = "입력이 비어 있습니다.", []
 
-        # 오늘 또는 현재 금어기 조회
         elif any(x in user_input for x in ["오늘", "지금", "현재"]) and "금어기" in user_input:
             fishes = get_fishes_in_season(fish_data)
             if fishes:
@@ -175,7 +174,6 @@ def TAC():
             else:
                 answer, quick_replies = "오늘 금어기인 어종이 없습니다.", []
 
-        # 특정 월 금어기 조회
         elif "금어기" in user_input and "월" in user_input:
             match = re.search(r"(\d{1,2})월", user_input)
             if match:
@@ -190,10 +188,8 @@ def TAC():
             else:
                 answer, quick_replies = "월 정보를 인식하지 못했습니다.", []
 
-        # 어종명 단독 또는 기타 문의
         else:
             matched_fish = extract_fish_name(user_input, 주요_어종)
-            logging.info(f"matched_fish: {matched_fish}")
             if matched_fish:
                 emoji = fish_emojis.get(matched_fish, "\U0001F41F")
                 info_text = get_fish_info(matched_fish, fish_data)
