@@ -5,6 +5,9 @@ import traceback
 import re
 import logging
 
+from fish_utils import get_fish_info
+from fish_data import fish_data 
+
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
@@ -90,19 +93,8 @@ def is_date_in_range(period: str, today: datetime) -> bool:
             start_date = datetime(today.year, start_month, start_day)
             end_date = datetime(today.year, end_month, end_day)
         return start_date <= today <= end_date
-    except Exception as e:
-        logging.warning(f"is_date_in_range 오류: {e} (period={period})")
+    except Exception:
         return False
-
-def filter_periods(periods, today):
-    if isinstance(periods, dict):
-        return periods
-    elif isinstance(periods, str):
-        if is_date_in_range(periods, today):
-            return periods
-        else:
-            return None
-    return None
 
 def get_fishes_in_season(fish_data, today=None):
     if today is None:
@@ -113,44 +105,14 @@ def get_fishes_in_season(fish_data, today=None):
             if key in fish_info:
                 period = fish_info[key]
                 if isinstance(period, dict):
-                    in_season_fishes.append(fish_name)
-                    break
+                    for sub_period in period.values():
+                        if is_date_in_range(sub_period, today):
+                            in_season_fishes.append(fish_name)
+                            break
                 elif isinstance(period, str) and is_date_in_range(period, today):
                     in_season_fishes.append(fish_name)
                     break
     return in_season_fishes
-
-def get_fish_info(fish_name, fish_data, today=None):
-    if today is None:
-        today = datetime.today()
-
-    fish = fish_data.get(fish_name)
-    if not fish:
-        return f"'{fish_name}'에 대한 정보가 없습니다."
-
-    금어기 = "없음"
-    for key in ["금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기", "지역별_금어기", "금어기_예외"]:
-        if key in fish:
-            value = fish[key]
-            if isinstance(value, dict):
-                금어기 = "; ".join(f"{k}: {v}" for k, v in value.items())
-            else:
-                금어기 = value
-            break
-
-    금지체장 = fish.get("금지체장") or fish.get("금지체중") or "없음"
-    if isinstance(금지체장, dict):
-        금지체장 = 금지체장.get("기본", list(금지체장.values())[0])
-
-    예외사항 = fish.get("금어기_해역_특이사항") or fish.get("금어기_예외") or fish.get("금어기_특정해역") or fish.get("금어기_추가")
-    포획비율 = fish.get("포획비율제한")
-
-    response = f"\U0001F6D1 금어기: {금어기}\n\U0001F6D1 금지체장: {금지체장}"
-    if 예외사항:
-        response += f"\n⚠️ 예외사항: {예외사항}"
-    if 포획비율:
-        response += f"\n⚠️ 포획비율제한: {포획비율}"
-    return response
 
 def extract_fish_name(user_input, fish_names):
     user_input_proc = user_input.replace(" ", "")
@@ -159,7 +121,6 @@ def extract_fish_name(user_input, fish_names):
         if name.replace(" ", "") in user_input_proc:
             logging.info(f"Detected fish name: {name}")
             return name
-    logging.info("No fish name detected")
     return None
 
 @app.route("/TAC", methods=["POST"])
@@ -168,8 +129,6 @@ def TAC():
         data = request.json
         user_input = data.get("userRequest", {}).get("utterance", "").strip()
         주요_어종 = list(fish_data.keys())
-
-        logging.info(f"User input: {user_input}")
 
         if not user_input:
             answer, quick_replies = "입력이 비어 있습니다.", []
@@ -183,7 +142,7 @@ def TAC():
                 answer, quick_replies = "오늘 금어기인 어종이 없습니다.", []
 
         elif "금어기" in user_input and "월" in user_input:
-            match = re.search(r"(\d{1,2})월", user_input)
+            match = re.search(r"(\d{1,2})\uC6D4", user_input)
             if match:
                 month = int(match.group(1))
                 today = datetime(datetime.today().year, month, 15)
@@ -199,9 +158,7 @@ def TAC():
         else:
             matched_fish = extract_fish_name(user_input, 주요_어종)
             if matched_fish:
-                emoji = fish_emojis.get(matched_fish, "\U0001F41F")
-                info_text = get_fish_info(matched_fish, fish_data)
-                answer = f"{emoji}{matched_fish}{emoji}\n\n{info_text}"
+                answer = get_fish_info(matched_fish, fish_data)
                 quick_replies = [
                     {"label": name, "messageText": name, "action": "message"}
                     for name in 주요_어종 if name != matched_fish
@@ -222,7 +179,7 @@ def TAC():
         return jsonify({
             "version": "2.0",
             "template": {
-                "outputs": [{"simpleText": {"text": f"오류가 발생했습니다: {str(e)}"}}]
+                "outputs": [{"simpleText": {"text": f"⚠️ 시스템 오류가 발생했습니다.\n\n{str(e)}"}}]
             }
         })
 
