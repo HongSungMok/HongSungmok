@@ -17,13 +17,28 @@ def is_date_in_range(period: str, today: datetime) -> bool:
     except Exception:
         return False
 
+def format_period(period: str) -> str:
+    try:
+        start_str, end_str = period.split("~")
+        start_month, start_day = map(int, start_str.strip().split("."))
+        end_str = end_str.strip()
+        if "익년" in end_str:
+            end_str = end_str.replace("익년", "")
+            end_month, end_day = map(int, end_str.split("."))
+            return f"{start_month}월 {start_day}일 ~ 익년 {end_month}월 {end_day}일"
+        else:
+            end_month, end_day = map(int, end_str.split("."))
+            return f"{start_month}월 {start_day}일 ~ {end_month}월 {end_day}일"
+    except Exception:
+        return period  # 오류 시 원문 반환
+
 def filter_periods(periods, today):
     if isinstance(periods, dict):
-        valid_periods = {}
-        for key, period in periods.items():
+        valid = []
+        for period in periods.values():
             if is_date_in_range(period, today):
-                valid_periods[key] = period
-        return valid_periods if valid_periods else None
+                valid.append(period)
+        return valid if valid else None
     elif isinstance(periods, str):
         return periods if is_date_in_range(periods, today) else None
     return None
@@ -34,7 +49,7 @@ def get_fish_info(fish_name, fish_data, today=None):
 
     fish = fish_data.get(fish_name)
     if not fish:
-        return f"'{fish_name}'에 대한 정보가 없습니다."
+        return f"🐟{fish_name}🐟\n\n🚫 금어기: 없음\n🚫 금지체장: 없음\⚠️ 예외사항: 없음\n⚠️ 포획비율제한: 없음"
 
     # 금어기
     금어기 = "없음"
@@ -42,17 +57,17 @@ def get_fish_info(fish_name, fish_data, today=None):
         if key in fish:
             filtered = filter_periods(fish[key], today)
             if filtered:
-                if isinstance(filtered, dict):
-                    금어기 = "; ".join(f"{k}: {v}" for k, v in filtered.items())
+                if isinstance(filtered, list):
+                    금어기 = "; ".join(format_period(p) for p in filtered)
                 else:
-                    금어기 = filtered
+                    금어기 = format_period(filtered)
                 break
             else:
                 if isinstance(fish[key], str):
-                    금어기 = fish[key]
+                    금어기 = format_period(fish[key])
                     break
                 elif isinstance(fish[key], dict):
-                    금어기 = "; ".join(f"{k}: {v}" for k, v in fish[key].items())
+                    금어기 = "; ".join(format_period(p) for p in fish[key].values())
                     break
 
     # 금지체장
@@ -79,7 +94,7 @@ def get_fish_info(fish_name, fish_data, today=None):
     # 포획비율제한
     포획비율 = fish.get("포획비율제한", "없음")
 
-    # 응답 포맷
+    # 응답 메시지
     response = f"🐟{fish_name}🐟\n\n"
     response += f"🚫 금어기: {금어기}\n"
     response += f"🚫 금지체장: {금지체장}\n"
@@ -87,5 +102,3 @@ def get_fish_info(fish_name, fish_data, today=None):
     response += f"⚠️ 포획비율제한: {포획비율}"
 
     return response
-
-
