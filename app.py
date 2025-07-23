@@ -16,10 +16,11 @@ fish_emojis = {
     "참조기": "🐠",
     "말쥐치": "🐡",
     "대게": "🦀",
-    "붉은대게": "🦞",
+    "붉은대게": "🦀",
     "오분자기": "🐚",
     "키조개": "🦪",
     "주꾸미": "🦑",
+    "게": "🦀",
     "해삼": "🌊"
 }
 
@@ -91,7 +92,7 @@ def is_date_in_range(period: str, today: datetime) -> bool:
     except Exception:
         return False
 
-# 금어기 기간 필터링
+# 기간 필터링
 def filter_periods(periods, today):
     if isinstance(periods, dict):
         valid_periods = {}
@@ -103,7 +104,7 @@ def filter_periods(periods, today):
         return periods if is_date_in_range(periods, today) else None
     return None
 
-# 금어기 중인 어종 반환
+# 금어기 중인 어종
 def get_fishes_in_season(fish_data, today=None):
     if today is None:
         today = datetime.today()
@@ -116,7 +117,7 @@ def get_fishes_in_season(fish_data, today=None):
                     break
     return in_season_fishes
 
-# 어종 정보 반환
+# 어종 정보 응답 생성
 def get_fish_info(fish_name, fish_data, today=None):
     if today is None:
         today = datetime.today()
@@ -184,7 +185,7 @@ def TAC():
                 answer, quick_replies = "월 정보를 인식하지 못했습니다.", []
 
         else:
-            matched_fish = next((name for name in fish_data if name == user_input), None)
+            matched_fish = next((name for name in fish_data if name in user_input), None)
             if matched_fish:
                 emoji = fish_emojis.get(matched_fish, "\U0001F41F")
                 info_text = get_fish_info(matched_fish, fish_data)
