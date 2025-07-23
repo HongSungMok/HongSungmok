@@ -146,9 +146,10 @@ def get_fish_info(fish_name, fish_data, today=None):
     return response
 
 def extract_fish_name(user_input, fish_names):
-    user_input_proc = user_input.replace(" ", "").lower()
-    for name in fish_names:
-        if name.replace(" ", "").lower() == user_input_proc:
+    user_input_proc = user_input.replace(" ", "")
+    sorted_names = sorted(fish_names, key=len, reverse=True)
+    for name in sorted_names:
+        if name.replace(" ", "") in user_input_proc:
             logging.info(f"Detected fish name: {name}")
             return name
     logging.info("No fish name detected")
@@ -178,13 +179,16 @@ def TAC():
             match = re.search(r"(\d{1,2})월", user_input)
             if match:
                 month = int(match.group(1))
-                today = datetime(datetime.today().year, month, 15)
-                fishes = get_fishes_in_season(fish_data, today)
-                if fishes:
-                    quick_replies = [{"label": f, "messageText": f, "action": "message"} for f in fishes]
-                    answer = f"{month}월 금어기 어종:\n" + ", ".join(fishes)
-                else:
-                    answer, quick_replies = f"{month}월 금어기 어종 없음.", []
+                try:
+                    today = datetime(datetime.today().year, month, 15)
+                    fishes = get_fishes_in_season(fish_data, today)
+                    if fishes:
+                        quick_replies = [{"label": f, "messageText": f, "action": "message"} for f in fishes]
+                        answer = f"{month}월 금어기 어종:\n" + ", ".join(fishes)
+                    else:
+                        answer, quick_replies = f"{month}월에는 금어기 어종이 없습니다.", []
+                except ValueError:
+                    answer, quick_replies = "월 정보를 정확히 입력해 주세요.", []
             else:
                 answer, quick_replies = "월 정보를 인식하지 못했습니다.", []
 
@@ -194,10 +198,8 @@ def TAC():
                 emoji = fish_emojis.get(matched_fish, "\U0001F41F")
                 info_text = get_fish_info(matched_fish, fish_data)
                 answer = f"{emoji}{matched_fish}{emoji}\n\n{info_text}"
-                quick_replies = [
-                    {"label": name, "messageText": name, "action": "message"}
-                    for name in 주요_어종 if name != matched_fish
-                ]
+                # 어종 상세정보 요청 시 버튼 제거
+                quick_replies = []
             else:
                 answer, quick_replies = "무엇을 도와드릴까요?", []
 
