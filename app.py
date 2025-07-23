@@ -77,7 +77,7 @@ context = """
 """
 
 # 날짜 범위 검사 함수
-def is_date_in_range(period: str, today: datetime) -> bool:
+ef is_date_in_range(period: str, today: datetime) -> bool:
     try:
         start_str, end_str = period.split("~")
         start_month, start_day = map(int, start_str.split("."))
@@ -164,9 +164,11 @@ def TAC():
 
         logging.info(f"User input: {user_input}")
 
+        # "금어기" 포함 여부 확인
         if not user_input:
             answer, quick_replies = "입력이 비어 있습니다.", []
 
+        # 오늘 / 지금 / 현재 + 금어기
         elif any(x in user_input for x in ["오늘", "지금", "현재"]) and "금어기" in user_input:
             fishes = get_fishes_in_season(fish_data)
             if fishes:
@@ -175,30 +177,36 @@ def TAC():
             else:
                 answer, quick_replies = "오늘 금어기인 어종이 없습니다.", []
 
+        # 특정 월 + 금어기
         elif "금어기" in user_input and "월" in user_input:
             match = re.search(r"(\d{1,2})월", user_input)
             if match:
                 month = int(match.group(1))
-                try:
-                    today = datetime(datetime.today().year, month, 15)
-                    fishes = get_fishes_in_season(fish_data, today)
-                    if fishes:
-                        quick_replies = [{"label": f, "messageText": f, "action": "message"} for f in fishes]
-                        answer = f"{month}월 금어기 어종:\n" + ", ".join(fishes)
-                    else:
-                        answer, quick_replies = f"{month}월에는 금어기 어종이 없습니다.", []
-                except ValueError:
-                    answer, quick_replies = "월 정보를 정확히 입력해 주세요.", []
+                if 1 <= month <= 12:
+                    try:
+                        today = datetime(datetime.today().year, month, 15)
+                        fishes = get_fishes_in_season(fish_data, today)
+                        if fishes:
+                            quick_replies = [{"label": f, "messageText": f, "action": "message"} for f in fishes]
+                            answer = f"{month}월 금어기 어종:\n" + ", ".join(fishes)
+                        else:
+                            answer, quick_replies = f"{month}월에는 금어기 어종이 없습니다.", []
+                    except Exception as e:
+                        logging.error(f"날짜 처리 오류: {e}")
+                        answer, quick_replies = "월 정보를 정확히 입력해 주세요.", []
+                else:
+                    answer, quick_replies = "월 정보는 1월부터 12월까지 입력해 주세요.", []
             else:
                 answer, quick_replies = "월 정보를 인식하지 못했습니다.", []
 
+        # 어종 이름만 입력했을 때
         else:
             matched_fish = extract_fish_name(user_input, 주요_어종)
             if matched_fish:
                 emoji = fish_emojis.get(matched_fish, "\U0001F41F")
                 info_text = get_fish_info(matched_fish, fish_data)
                 answer = f"{emoji}{matched_fish}{emoji}\n\n{info_text}"
-                # 어종 상세정보 요청 시 버튼 제거
+                # 버튼 안 나오게 처리(버튼 없음)
                 quick_replies = []
             else:
                 answer, quick_replies = "무엇을 도와드릴까요?", []
@@ -219,6 +227,7 @@ def TAC():
                 "outputs": [{"simpleText": {"text": f"오류가 발생했습니다: {str(e)}"}}]
             }
         })
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
