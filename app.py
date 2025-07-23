@@ -1,12 +1,14 @@
 from datetime import datetime
 from flask import Flask, request, jsonify
 import os
-import requests
 import traceback
-import re  # 누락된 import 추가
-from fish_data import fish_data  # fish_data는 dict 형태
+import re
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
+
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -74,8 +76,6 @@ context = """
 """
 
 # 날짜 범위 검사 함수
-logging.basicConfig(level=logging.INFO)
-
 def is_date_in_range(period: str, today: datetime) -> bool:
     try:
         start_str, end_str = period.split("~")
@@ -92,12 +92,10 @@ def is_date_in_range(period: str, today: datetime) -> bool:
         return start_date <= today <= end_date
     except Exception as e:
         logging.warning(f"is_date_in_range 오류: {e} (period={period})")
-        # 날짜 포맷 문제시 False 반환
         return False
 
 def filter_periods(periods, today):
     if isinstance(periods, dict):
-        # dict면 날짜 검사 없이 그대로 반환 (스킬 오류 예방)
         return periods
     elif isinstance(periods, str):
         if is_date_in_range(periods, today):
@@ -115,7 +113,6 @@ def get_fishes_in_season(fish_data, today=None):
             if key in fish_info:
                 period = fish_info[key]
                 if isinstance(period, dict):
-                    # dict면 무조건 포함시킴 (복잡한 날짜 파싱 대신)
                     in_season_fishes.append(fish_name)
                     break
                 elif isinstance(period, str) and is_date_in_range(period, today):
@@ -136,7 +133,6 @@ def get_fish_info(fish_name, fish_data, today=None):
         if key in fish:
             value = fish[key]
             if isinstance(value, dict):
-                # dict면 그대로 key: value 형태로 문자열 생성 (날짜 검사 없이)
                 금어기 = "; ".join(f"{k}: {v}" for k, v in value.items())
             else:
                 금어기 = value
@@ -229,7 +225,6 @@ def TAC():
                 "outputs": [{"simpleText": {"text": f"오류가 발생했습니다: {str(e)}"}}]
             }
         })
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
