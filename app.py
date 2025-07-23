@@ -3,12 +3,19 @@ from flask import Flask, request, jsonify
 import os
 import requests
 import traceback
+import re  # 누락된 import 추가
 from fish_data import fish_data  # fish_data는 dict 형태
 
 app = Flask(__name__)
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+fish_emojis = {
+    "고등어": "\U0001F41F", "문어": "\U0001F419", "오징어": "\U0001F991", "게": "\U0001F980",
+    "갈치": "\U0001F420", "김": "\U0001F340", "우뭇가사리": "\U0001F33F"
+}
+
 
 context = """
 [요약]
@@ -89,18 +96,21 @@ def filter_periods(periods, today):
         return periods if is_date_in_range(periods, today) else None
     return None
 
-# 특정 월에 금어기인 어종 리스트 반환
-def get_fishes_by_month(fish_data, month):
-    result = []
-    today = datetime.today().replace(month=month, day=15)
-    for name, info in fish_data.items():
-        for key in ["금어기", "유자망_금어기", "지역별_금어기"]:
-            if key in info and filter_periods(info[key], today):
-                result.append(name)
-                break
-    return result
+# 특정 월 또는 오늘 금어기 어종 반환
+def get_fishes_in_season(fish_data, today=None):
+    if today is None:
+        today = datetime.today()
 
-# 어종 정보 반환 함수
+    in_season_fishes = []
+    for fish_name, fish_info in fish_data.items():
+        for key in ["금어기", "지역별_금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기"]:
+            if key in fish_info:
+                if filter_periods(fish_info[key], today):
+                    in_season_fishes.append(fish_name)
+                    break
+    return in_season_fishes
+
+# 어종 정보 반환
 def get_fish_info(fish_name, fish_data, today=None):
     if today is None:
         today = datetime.today()
@@ -109,151 +119,90 @@ def get_fish_info(fish_name, fish_data, today=None):
     if not fish:
         return f"'{fish_name}'에 대한 정보가 없습니다."
 
-    금어기 = None
+    금어기 = "없음"
     for key in ["금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기", "지역별_금어기", "금어기_예외"]:
         if key in fish:
             filtered = filter_periods(fish[key], today)
             if filtered:
-                if isinstance(filtered, dict):
-                    금어기 = "; ".join(f"{k}: {v}" for k, v in filtered.items())
-                else:
-                    금어기 = filtered
+                금어기 = "; ".join(f"{k}: {v}" for k, v in filtered.items()) if isinstance(filtered, dict) else filtered
                 break
-            else:
-                if isinstance(fish[key], str):
-                    금어기 = fish[key]
-                    break
-                elif isinstance(fish[key], dict):
-                    금어기 = "; ".join(f"{k}: {v}" for k, v in fish[key].items())
-                    break
-    if not 금어기:
-        금어기 = "없음"
+            elif isinstance(fish[key], (str, dict)):
+                금어기 = "; ".join(f"{k}: {v}" for k, v in fish[key].items()) if isinstance(fish[key], dict) else fish[key]
+                break
 
-    금지체장 = None
-    if "금지체장" in fish:
-        금지체장 = fish["금지체장"]
-        if isinstance(금지체장, dict):
-            if "기본" in 금지체장:
-                금지체장 = 금지체장["기본"]
-            else:
-                금지체장 = list(금지체장.values())[0]
-    else:
-        금지체장 = "없음"
-    if not 금지체장:
-        금지체장 = "없음"
+    금지체장 = fish.get("금지체장", "없음")
+    if isinstance(금지체장, dict):
+        금지체장 = 금지체장.get("기본", list(금지체장.values())[0])
 
     예외사항 = fish.get("금어기_해역_특이사항") or fish.get("금어기_예외") or fish.get("금어기_특정해역") or fish.get("금어기_추가")
     포획비율 = fish.get("포획비율제한")
 
-    response = f"🚫 금어기: {금어기}\n🚫 금지체장: {금지체장}"
+    response = f"\U0001F6D1 금어기: {금어기}\n\U0001F6D1 금지체장: {금지체장}"
     if 예외사항:
         response += f"\n⚠️ 예외사항: {예외사항}"
     if 포획비율:
         response += f"\n⚠️ 포획비율제한: {포획비율}"
     return response
 
-# 어종별 이모지 매핑
-fish_emojis = {
-    "고등어": "🐟",
-    "문어": "🐙",
-    "오징어": "🦑",
-    "게": "🦀",
-    "갈치": "🐠",
-    "김": "🍀",
-    "우뭇가사리": "🌿",
-}
-
 @app.route("/TAC", methods=["POST"])
 def TAC():
     try:
         data = request.json
         user_input = data.get("userRequest", {}).get("utterance", "").strip()
-
-        주요_어종 = [
-            "고등어", "전갱이", "삼치", "갈치", "도루묵",
-            "참조기", "오징어", "대게", "붉은대게", "제주소라",
-            "꽃게", "참홍어", "키조개", "개조개", "바지락",
-            "김", "우뭇가사리"
-        ]
+        주요_어종 = list(fish_data.keys())
 
         if not user_input:
-            answer = "입력이 비어 있습니다. 질문을 입력해주세요."
-            quick_replies = []
+            answer, quick_replies = "입력이 비어 있습니다.", []
+
+        elif "오늘" in user_input or "지금" in user_input:
+            fishes = get_fishes_in_season(fish_data)
+            if fishes:
+                quick_replies = [{"label": f, "messageText": f} for f in fishes]
+                answer = f"🌟 오늘 금어기 중인 어종:\n" + ", ".join(fishes)
+            else:
+                answer, quick_replies = "오늘 금어기인 어종이 없습니다.", []
+
+        elif "금어기" in user_input and "월" in user_input:
+            match = re.search(r"(\d{1,2})월", user_input)
+            if match:
+                month = int(match.group(1))
+                today = datetime(datetime.today().year, month, 15)
+                fishes = get_fishes_in_season(fish_data, today)
+                if fishes:
+                    quick_replies = [{"label": f, "messageText": f} for f in fishes]
+                    answer = f"{month}월 금어기 어종:\n" + ", ".join(fishes)
+                else:
+                    answer, quick_replies = f"{month}월 금어기 어종 없음.", []
+            else:
+                answer, quick_replies = "월 정보를 인식하지 못했습니다.", []
 
         else:
-            # 월 금어기 요청 처리
-            if "금어기" in user_input and "월" in user_input:
-                month_match = re.search(r"(\d{1,2})월", user_input)
-                if month_match:
-                    month = int(month_match.group(1))
-                    fishes = get_fishes_by_month(fish_data, month)
-                    if fishes:
-                        quick_replies = [{"label": f, "messageText": f} for f in fishes]
-                        answer = f"{month}월 금어기 어종 목록:\n" + ", ".join(fishes)
-                    else:
-                        answer = f"{month}월 금어기인 어종이 없습니다."
-                        quick_replies = []
-                else:
-                    answer = "월 정보를 인식하지 못했습니다. 예: '7월 금어기 어종 알려줘'"
-                    quick_replies = []
-
+            matched_fish = next((name for name in fish_data if name in user_input), None)
+            if matched_fish:
+                emoji = fish_emojis.get(matched_fish, "\U0001F41F")
+                info_text = get_fish_info(matched_fish, fish_data)
+                answer = f"{emoji}{matched_fish}{emoji}\n\n{info_text}"
+                quick_replies = [
+                    {"label": name, "messageText": name, "action": "message"}
+                    for name in 주요_어종 if name != matched_fish
+                ]
             else:
-                matched_fish = None
-                for fish_name in fish_data.keys():
-                    if fish_name in user_input:
-                        matched_fish = fish_name
-                        break
+                answer, quick_replies = "무엇을 도와드릴까요?", []
 
-                if matched_fish:
-                    emoji = fish_emojis.get(matched_fish, "🐟")
-                    info_text = get_fish_info(matched_fish, fish_data)
-                    answer = f"{emoji}{matched_fish}{emoji}\n\n{info_text}"
-                    quick_replies = [
-                        {"messageText": name, "action": "message", "label": name}
-                        for name in 주요_어종 if name != matched_fish
-                    ]
-
-                else:
-                    if not OPENROUTER_API_KEY:
-                        answer = "서버 환경 변수에 OPENROUTER_API_KEY가 설정되어 있지 않습니다."
-                        quick_replies = []
-                    else:
-                        messages = [
-                            {"role": "system", "content": "당신은 수산자원관리법 전문가입니다. 질문에 정확하고 간결하게 답변하세요."},
-                            {"role": "user", "content": context + f"\n\n질문: {user_input}\n답변:"}
-                        ]
-                        answer = call_openrouter_api(messages)
-                        quick_replies = []
-
-        if not isinstance(answer, str):
-            answer = str(answer)
-
-        if len(answer) > 1900:
-            answer = answer[:1900] + "\n\n[답변이 너무 길어 일부만 표시합니다.]"
-
-        if not answer.strip():
-            answer = "답변이 없습니다."
-
-        response_json = {
+        return jsonify({
             "version": "2.0",
             "template": {
-                "outputs": [
-                    {"simpleText": {"text": answer}}
-                ],
+                "outputs": [{"simpleText": {"text": answer}}],
                 "quickReplies": quick_replies
             }
-        }
-
-        return jsonify(response_json)
+        })
 
     except Exception:
         traceback.print_exc()
         return jsonify({
             "version": "2.0",
             "template": {
-                "outputs": [
-                    {"simpleText": {"text": "오류가 발생했습니다. 다시 시도해주세요."}}
-                ]
+                "outputs": [{"simpleText": {"text": "오류가 발생했습니다. 다시 시도해주세요."}}]
             }
         })
 
