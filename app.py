@@ -74,6 +74,8 @@ context = """
 """
 
 # 날짜 범위 검사 함수
+logging.basicConfig(level=logging.INFO)
+
 def is_date_in_range(period: str, today: datetime) -> bool:
     try:
         start_str, end_str = period.split("~")
@@ -89,21 +91,20 @@ def is_date_in_range(period: str, today: datetime) -> bool:
             end_date = datetime(today.year, end_month, end_day)
         return start_date <= today <= end_date
     except Exception as e:
-        logging.error(f"is_date_in_range 오류: {e} (period={period})")
+        logging.warning(f"is_date_in_range 오류: {e} (period={period})")
+        # 날짜 포맷 문제시 False 반환
         return False
-
 
 def filter_periods(periods, today):
     if isinstance(periods, dict):
-        valid_periods = {}
-        for key, period in periods.items():
-            if is_date_in_range(period, today):
-                valid_periods[key] = period
-        return valid_periods if valid_periods else None
+        # dict면 날짜 검사 없이 그대로 반환 (스킬 오류 예방)
+        return periods
     elif isinstance(periods, str):
-        return periods if is_date_in_range(periods, today) else None
+        if is_date_in_range(periods, today):
+            return periods
+        else:
+            return None
     return None
-
 
 def get_fishes_in_season(fish_data, today=None):
     if today is None:
@@ -112,11 +113,15 @@ def get_fishes_in_season(fish_data, today=None):
     for fish_name, fish_info in fish_data.items():
         for key in ["금어기", "지역별_금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기"]:
             if key in fish_info:
-                if filter_periods(fish_info[key], today):
+                period = fish_info[key]
+                if isinstance(period, dict):
+                    # dict면 무조건 포함시킴 (복잡한 날짜 파싱 대신)
+                    in_season_fishes.append(fish_name)
+                    break
+                elif isinstance(period, str) and is_date_in_range(period, today):
                     in_season_fishes.append(fish_name)
                     break
     return in_season_fishes
-
 
 def get_fish_info(fish_name, fish_data, today=None):
     if today is None:
@@ -126,18 +131,17 @@ def get_fish_info(fish_name, fish_data, today=None):
     if not fish:
         return f"'{fish_name}'에 대한 정보가 없습니다."
 
-    # 금어기 정보 키들 중 첫 발견 값 가져오기 (날짜 필터 없이 전체 표시)
     금어기 = "없음"
     for key in ["금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기", "지역별_금어기", "금어기_예외"]:
         if key in fish:
             value = fish[key]
             if isinstance(value, dict):
+                # dict면 그대로 key: value 형태로 문자열 생성 (날짜 검사 없이)
                 금어기 = "; ".join(f"{k}: {v}" for k, v in value.items())
             else:
                 금어기 = value
             break
 
-    # 금지체장 or 금지체중 처리
     금지체장 = fish.get("금지체장") or fish.get("금지체중") or "없음"
     if isinstance(금지체장, dict):
         금지체장 = 금지체장.get("기본", list(금지체장.values())[0])
@@ -152,9 +156,7 @@ def get_fish_info(fish_name, fish_data, today=None):
         response += f"\n⚠️ 포획비율제한: {포획비율}"
     return response
 
-
 def extract_fish_name(user_input, fish_names):
-    # 공백 제거 후 어종명 포함 검사
     user_input_proc = user_input.replace(" ", "")
     sorted_names = sorted(fish_names, key=len, reverse=True)
     for name in sorted_names:
@@ -163,7 +165,6 @@ def extract_fish_name(user_input, fish_names):
             return name
     logging.info("No fish name detected")
     return None
-
 
 @app.route("/TAC", methods=["POST"])
 def TAC():
