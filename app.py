@@ -76,11 +76,11 @@ context = """
  • 불법 어획물 방류명령 불이행, 허위 보고, 지정 외 거래 등
 """
 
-# 날짜 범위 검사 함수
+# 날짜 포맷 자연어화 함수
 def is_date_in_range(period: str, today: datetime) -> bool:
     try:
         start_str, end_str = period.split("~")
-        start_month, start_day = map(int, start_str.split("."))
+        start_month, start_day = map(int, start_str.strip().split("."))
         if "익년" in end_str:
             end_str = end_str.replace("익년", "")
             end_month, end_day = map(int, end_str.strip().split("."))
@@ -91,45 +91,57 @@ def is_date_in_range(period: str, today: datetime) -> bool:
             start_date = datetime(today.year, start_month, start_day)
             end_date = datetime(today.year, end_month, end_day)
         return start_date <= today <= end_date
-    except Exception as e:
-        logging.warning(f"is_date_in_range 오류: {e} (period={period})")
+    except:
         return False
 
-def get_fishes_in_season(fish_data, today=None):
-    if today is None:
-        today = datetime.today()
-    in_season_fishes = []
-    for fish_name, fish_info in fish_data.items():
-        for key in ["금어기", "지역별_금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기"]:
-            if key in fish_info:
-                period = fish_info[key]
-                if isinstance(period, dict):
-                    for sub_period in period.values():
-                        if isinstance(sub_period, str) and is_date_in_range(sub_period, today):
-                            in_season_fishes.append(fish_name)
-                            break
-                elif isinstance(period, str) and is_date_in_range(period, today):
-                    in_season_fishes.append(fish_name)
-                    break
-    return in_season_fishes
+def filter_periods(periods, today):
+    if isinstance(periods, dict):
+        valid = {}
+        for key, val in periods.items():
+            if is_date_in_range(val, today):
+                valid[key] = val
+        return valid if valid else None
+    elif isinstance(periods, str):
+        return periods if is_date_in_range(periods, today) else None
+    return None
+
+def format_period(period: str) -> str:
+    try:
+        start_str, end_str = period.split("~")
+        start_month, start_day = map(int, start_str.strip().split("."))
+        if "익년" in end_str:
+            end_str = end_str.replace("익년", "")
+            end_month, end_day = map(int, end_str.strip().split("."))
+            return f"{start_month}월 {start_day}일 ~ 익년 {end_month}월 {end_day}일"
+        else:
+            end_month, end_day = map(int, end_str.strip().split("."))
+            return f"{start_month}월 {start_day}일 ~ {end_month}월 {end_day}일"
+    except:
+        return period
 
 def get_fish_info(fish_name, fish_data, today=None):
     if today is None:
         today = datetime.today()
-
     fish = fish_data.get(fish_name)
     if not fish:
-        return f"'{fish_name}'에 대한 정보가 없습니다."
+        return f"🚫 금어기: 없음\n🚫 금지체장: 없음"
 
     금어기 = "없음"
     for key in ["금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기", "지역별_금어기", "금어기_예외"]:
         if key in fish:
-            value = fish[key]
-            if isinstance(value, dict):
-                금어기 = "; ".join(f"{k}: {v}" for k, v in value.items())
-            else:
-                금어기 = value
-            break
+            value = filter_periods(fish[key], today)
+            if value:
+                if isinstance(value, dict):
+                    금어기 = "; ".join(f"{k}: {format_period(v)}" for k, v in value.items())
+                else:
+                    금어기 = format_period(value)
+                break
+            elif isinstance(fish[key], dict):
+                금어기 = "; ".join(f"{k}: {format_period(v)}" for k, v in fish[key].items())
+                break
+            elif isinstance(fish[key], str):
+                금어기 = format_period(fish[key])
+                break
 
     금지체장 = fish.get("금지체장") or fish.get("금지체중") or "없음"
     if isinstance(금지체장, dict):
@@ -138,97 +150,98 @@ def get_fish_info(fish_name, fish_data, today=None):
     예외사항 = fish.get("금어기_해역_특이사항") or fish.get("금어기_예외") or fish.get("금어기_특정해역") or fish.get("금어기_추가")
     포획비율 = fish.get("포획비율제한")
 
-    response = f"\U0001F6D1 금어기: {금어기}\n\U0001F6D1 금지체장: {금지체장}"
+    result = f"🚫 금어기: {금어기}\n🚫 금지체장: {금지체장}"
     if 예외사항:
-        response += f"\n⚠️ 예외사항: {예외사항}"
+        result += f"\n⚠️ 예외사항: {예외사항}"
     if 포획비율:
-        response += f"\n⚠️ 포획비율제한: {포획비율}"
-    return response
+        result += f"\n⚠️ 포획비율제한: {포획비율}"
 
-def extract_fish_name(user_input, fish_names):
-    user_input_proc = user_input.replace(" ", "")
-    sorted_names = sorted(fish_names, key=len, reverse=True)
-    for name in sorted_names:
-        if name.replace(" ", "") in user_input_proc:
-            logging.info(f"Detected fish name: {name}")
+    return result
+
+def extract_fish_name(user_input, fish_list):
+    for name in fish_list:
+        if name in user_input:
             return name
-    logging.info("No fish name detected")
     return None
 
-@app.route("/TAC", methods=["POST"])
-def TAC():
-    try:
-        data = request.json
-        user_input = data.get("userRequest", {}).get("utterance", "").strip()
-        주요_어종 = list(fish_data.keys())
+@app.route("/fishbot", methods=["POST"])
+def fishbot():
+    body = request.get_json()
+    user_input = body["userRequest"]["utterance"].strip()
+    today = datetime.today()
+    주요_어종 = list(fish_data.keys())
 
-        logging.info(f"User input: {user_input}")
-
-        # "금어기" 포함 여부 확인
-        if not user_input:
-            answer, quick_replies = "입력이 비어 있습니다.", []
-
-        # 오늘 / 지금 / 현재 + 금어기
-        elif any(x in user_input for x in ["오늘", "지금", "현재"]) and "금어기" in user_input:
-            fishes = get_fishes_in_season(fish_data)
-            if fishes:
-                quick_replies = [{"label": f, "messageText": f, "action": "message"} for f in fishes]
-                answer = f"🌟 오늘 금어기 중인 어종:\n" + ", ".join(fishes)
-            else:
-                answer, quick_replies = "오늘 금어기인 어종이 없습니다.", []
-
-        # 특정 월 + 금어기
-        elif "금어기" in user_input and "월" in user_input:
-            match = re.search(r"(\d{1,2})월", user_input)
-            if match:
-                month = int(match.group(1))
-                if 1 <= month <= 12:
-                    try:
-                        today = datetime(datetime.today().year, month, 15)
-                        fishes = get_fishes_in_season(fish_data, today)
-                        if fishes:
-                            quick_replies = [{"label": f, "messageText": f, "action": "message"} for f in fishes]
-                            answer = f"{month}월 금어기 어종:\n" + ", ".join(fishes)
-                        else:
-                            answer, quick_replies = f"{month}월에는 금어기 어종이 없습니다.", []
-                    except Exception as e:
-                        logging.error(f"날짜 처리 오류: {e}")
-                        answer, quick_replies = "월 정보를 정확히 입력해 주세요.", []
-                else:
-                    answer, quick_replies = "월 정보는 1월부터 12월까지 입력해 주세요.", []
-            else:
-                answer, quick_replies = "월 정보를 인식하지 못했습니다.", []
-
-        # 어종 이름만 입력했을 때
+    # 현재 금어기 중인 어종 요청
+    if "현재 금어기" in user_input or "오늘 금어기" in user_input:
+        result = []
+        for name, data in fish_data.items():
+            for key in ["금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기", "지역별_금어기", "금어기_예외"]:
+                if key in data:
+                    if filter_periods(data[key], today):
+                        result.append(name)
+                        break
+        if result:
+            answer = f"🌟 오늘 금어기 중인 어종:\n" + ", ".join(result)
+            buttons = [{"label": name, "action": "message", "messageText": name} for name in result]
         else:
-            matched_fish = extract_fish_name(user_input, 주요_어종)
-            if matched_fish:
-                emoji = fish_emojis.get(matched_fish, "\U0001F41F")
-                info_text = get_fish_info(matched_fish, fish_data)
-                answer = f"{emoji}{matched_fish}{emoji}\n\n{info_text}"
-                # 버튼 안 나오게 처리(버튼 없음)
-                quick_replies = []
-            else:
-                answer, quick_replies = "무엇을 도와드릴까요?", []
-
+            answer = "현재 금어기 중인 어종이 없습니다."
+            buttons = []
         return jsonify({
             "version": "2.0",
             "template": {
                 "outputs": [{"simpleText": {"text": answer}}],
-                "quickReplies": quick_replies
+                "quickReplies": buttons
             }
         })
 
-    except Exception as e:
-        logging.error(f"Exception: {e}", exc_info=True)
-        return jsonify({
-            "version": "2.0",
-            "template": {
-                "outputs": [{"simpleText": {"text": f"오류가 발생했습니다: {str(e)}"}}]
-            }
-        })
+    # 'X월 금어기 알려줘' 요청
+    if "월 금어기" in user_input:
+        import re
+        match = re.search(r"(\d{1,2})월", user_input)
+        if match:
+            month = int(match.group(1))
+            result = []
+            for name, data in fish_data.items():
+                for key in ["금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기", "지역별_금어기", "금어기_예외"]:
+                    if key in data:
+                        periods = data[key]
+                        if isinstance(periods, dict):
+                            for p in periods.values():
+                                if p.startswith(f"{month}.") or f"~{month}." in p:
+                                    result.append(name)
+                                    break
+                        elif isinstance(periods, str):
+                            if periods.startswith(f"{month}.") or f"~{month}." in periods:
+                                result.append(name)
+                                break
+            if result:
+                answer = f"📅 {month}월 금어기 어종:\n" + ", ".join(result)
+                buttons = [{"label": name, "action": "message", "messageText": name} for name in result]
+            else:
+                answer = f"{month}월 금어기 중인 어종이 없습니다."
+                buttons = []
+            return jsonify({
+                "version": "2.0",
+                "template": {
+                    "outputs": [{"simpleText": {"text": answer}}],
+                    "quickReplies": buttons
+                }
+            })
 
+    # 어종 이름만 입력한 경우
+    fish_name = extract_fish_name(user_input, 주요_어종)
+    if not fish_name:
+        # 어종명 + 금어기 형태를 제거하고 시도
+        fish_name = user_input.replace(" 금어기", "").strip()
+
+    info = get_fish_info(fish_name, fish_data)
+    return jsonify({
+        "version": "2.0",
+        "template": {
+            "outputs": [{"simpleText": {"text": f"🐟{fish_name}🐟\n\n{info}"}}],
+            "quickReplies": []
+        }
+    })
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=5000)
