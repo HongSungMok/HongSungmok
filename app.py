@@ -108,10 +108,9 @@ def get_fishes_in_season(fish_data, today=None):
     in_season_fishes = []
     for fish_name, fish_info in fish_data.items():
         for key in ["금어기", "지역별_금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기"]:
-            if key in fish_info:
-                if filter_periods(fish_info[key], today):
-                    in_season_fishes.append(fish_name)
-                    break
+            if key in fish_info and filter_periods(fish_info[key], today):
+                in_season_fishes.append(fish_name)
+                break
     return in_season_fishes
 
 def get_fish_info(fish_name, fish_data, today=None):
@@ -122,25 +121,36 @@ def get_fish_info(fish_name, fish_data, today=None):
     if not fish:
         return f"'{fish_name}'에 대한 정보가 없습니다."
 
+    # 날짜 필터 없이 금어기 정보 전체 노출
     금어기 = "없음"
     for key in ["금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기", "지역별_금어기", "금어기_예외"]:
         if key in fish:
-            filtered = filter_periods(fish[key], today)
-            if filtered:
-                금어기 = "; ".join(f"{k}: {v}" for k, v in filtered.items()) if isinstance(filtered, dict) else filtered
-                break
-            elif isinstance(fish[key], (str, dict)):
-                금어기 = "; ".join(f"{k}: {v}" for k, v in fish[key].items()) if isinstance(fish[key], dict) else fish[key]
-                break
+            value = fish[key]
+            if isinstance(value, dict):
+                금어기 = "; ".join(f"{k}: {v}" for k, v in value.items())
+            else:
+                금어기 = value
+            break
 
-    금지체장 = fish.get("금지체장", "없음")
-    if isinstance(금지체장, dict):
-        금지체장 = 금지체장.get("기본", list(금지체장.values())[0])
+    # 금지체장 또는 금지체중 우선으로
+    금지체장 = fish.get("금지체장")
+    금지체중 = fish.get("금지체중")
+    금지정보 = "없음"
+    if 금지체장:
+        if isinstance(금지체장, dict):
+            금지정보 = 금지체장.get("기본", list(금지체장.values())[0])
+        else:
+            금지정보 = 금지체장
+    elif 금지체중:
+        if isinstance(금지체중, dict):
+            금지정보 = 금지체중.get("기본", list(금지체중.values())[0])
+        else:
+            금지정보 = 금지체중
 
     예외사항 = fish.get("금어기_해역_특이사항") or fish.get("금어기_예외") or fish.get("금어기_특정해역") or fish.get("금어기_추가")
     포획비율 = fish.get("포획비율제한")
 
-    response = f"\U0001F6D1 금어기: {금어기}\n\U0001F6D1 금지체장: {금지체장}"
+    response = f"\U0001F6D1 금어기: {금어기}\n\U0001F6D1 금지체장/체중: {금지정보}"
     if 예외사항:
         response += f"\n⚠️ 예외사항: {예외사항}"
     if 포획비율:
@@ -148,13 +158,11 @@ def get_fish_info(fish_name, fish_data, today=None):
     return response
 
 def extract_fish_name(user_input, fish_names):
-    """
-    user_input에서 fish_names 중 가장 긴 이름부터 찾아 포함된 첫 어종명 반환
-    """
+    # 가장 긴 어종명부터 매칭
     sorted_names = sorted(fish_names, key=len, reverse=True)
     for name in sorted_names:
-        pattern = re.compile(rf'\b{name}\b')
-        if pattern.search(user_input):
+        # 정확한 단어 매칭 (경계 확인)
+        if re.search(rf'\b{name}\b', user_input):
             return name
     return None
 
@@ -196,10 +204,7 @@ def TAC():
                 emoji = fish_emojis.get(matched_fish, "\U0001F41F")
                 info_text = get_fish_info(matched_fish, fish_data)
                 answer = f"{emoji}{matched_fish}{emoji}\n\n{info_text}"
-                quick_replies = [
-                    {"label": name, "messageText": name, "action": "message"}
-                    for name in 주요_어종 if name != matched_fish
-                ]
+                quick_replies = [{"label": name, "messageText": name, "action": "message"} for name in 주요_어종 if name != matched_fish]
             else:
                 answer, quick_replies = "무엇을 도와드릴까요?", []
 
