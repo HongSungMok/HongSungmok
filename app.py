@@ -77,7 +77,7 @@ context = """
 """
 
 # 날짜 범위 검사 함수
-ef is_date_in_range(period: str, today: datetime) -> bool:
+def is_date_in_range(period: str, today: datetime) -> bool:
     try:
         start_str, end_str = period.split("~")
         start_month, start_day = map(int, start_str.split("."))
