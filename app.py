@@ -154,10 +154,10 @@ def TAC():
         if not user_input:
             answer, quick_replies = "입력이 비어 있습니다.", []
 
-        elif "오늘" in user_input or "지금" in user_input:
+        elif "오늘" in user_input or "지금" in user_input  or "현재" in user_input:
             fishes = get_fishes_in_season(fish_data)
             if fishes:
-                quick_replies = [{"label": f, "messageText": f} for f in fishes]
+                quick_replies = [{"label": f, "messageText": f, "action": "message"} for f in fishes]
                 answer = f"🌟 오늘 금어기 중인 어종:\n" + ", ".join(fishes)
             else:
                 answer, quick_replies = "오늘 금어기인 어종이 없습니다.", []
@@ -169,7 +169,7 @@ def TAC():
                 today = datetime(datetime.today().year, month, 15)
                 fishes = get_fishes_in_season(fish_data, today)
                 if fishes:
-                    quick_replies = [{"label": f, "messageText": f} for f in fishes]
+                    quick_replies = [{"label": f, "messageText": f, "action": "message"} for f in fishes]
                     answer = f"{month}월 금어기 어종:\n" + ", ".join(fishes)
                 else:
                     answer, quick_replies = f"{month}월 금어기 어종 없음.", []
