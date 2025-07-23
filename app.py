@@ -79,26 +79,17 @@ context = """
 # 날짜 범위 검사 함수
 def is_date_in_range(period: str, today: datetime) -> bool:
     try:
-        if "~" not in period:
-            return False
-
         start_str, end_str = period.split("~")
-
-        start_str = start_str.strip()
-        # 부가설명 제거 (숫자와 점(.)만 남김)
-        end_str = re.findall(r"[\d\.]+", end_str)[0]
-
         start_month, start_day = map(int, start_str.split("."))
-        if "익년" in period:
+        if "익년" in end_str:
             end_str = end_str.replace("익년", "")
-            end_month, end_day = map(int, end_str.split("."))
+            end_month, end_day = map(int, end_str.strip().split("."))
             start_date = datetime(today.year, start_month, start_day)
             end_date = datetime(today.year + 1, end_month, end_day)
         else:
-            end_month, end_day = map(int, end_str.split("."))
+            end_month, end_day = map(int, end_str.strip().split("."))
             start_date = datetime(today.year, start_month, start_day)
             end_date = datetime(today.year, end_month, end_day)
-
         return start_date <= today <= end_date
     except Exception as e:
         logging.warning(f"is_date_in_range 오류: {e} (period={period})")
@@ -117,10 +108,9 @@ def get_fishes_in_season(fish_data, today=None):
                         if isinstance(sub_period, str) and is_date_in_range(sub_period, today):
                             in_season_fishes.append(fish_name)
                             break
-                elif isinstance(period, str):
-                    if is_date_in_range(period, today):
-                        in_season_fishes.append(fish_name)
-                        break
+                elif isinstance(period, str) and is_date_in_range(period, today):
+                    in_season_fishes.append(fish_name)
+                    break
     return in_season_fishes
 
 def get_fish_info(fish_name, fish_data, today=None):
@@ -156,10 +146,9 @@ def get_fish_info(fish_name, fish_data, today=None):
     return response
 
 def extract_fish_name(user_input, fish_names):
-    user_input_proc = user_input.replace(" ", "")
-    sorted_names = sorted(fish_names, key=len, reverse=True)
-    for name in sorted_names:
-        if name.replace(" ", "") in user_input_proc:
+    user_input_proc = user_input.replace(" ", "").lower()
+    for name in fish_names:
+        if name.replace(" ", "").lower() in user_input_proc:
             logging.info(f"Detected fish name: {name}")
             return name
     logging.info("No fish name detected")
@@ -177,6 +166,7 @@ def TAC():
         if not user_input:
             answer, quick_replies = "입력이 비어 있습니다.", []
 
+        # 오늘 또는 현재 금어기 조회
         elif any(x in user_input for x in ["오늘", "지금", "현재"]) and "금어기" in user_input:
             fishes = get_fishes_in_season(fish_data)
             if fishes:
@@ -185,6 +175,7 @@ def TAC():
             else:
                 answer, quick_replies = "오늘 금어기인 어종이 없습니다.", []
 
+        # 특정 월 금어기 조회
         elif "금어기" in user_input and "월" in user_input:
             match = re.search(r"(\d{1,2})월", user_input)
             if match:
@@ -199,8 +190,10 @@ def TAC():
             else:
                 answer, quick_replies = "월 정보를 인식하지 못했습니다.", []
 
+        # 어종명 단독 또는 기타 문의
         else:
             matched_fish = extract_fish_name(user_input, 주요_어종)
+            logging.info(f"matched_fish: {matched_fish}")
             if matched_fish:
                 emoji = fish_emojis.get(matched_fish, "\U0001F41F")
                 info_text = get_fish_info(matched_fish, fish_data)
@@ -231,4 +224,4 @@ def TAC():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port)
