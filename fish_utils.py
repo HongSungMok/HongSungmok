@@ -1,28 +1,10 @@
 from datetime import datetime
 import logging
-import re
 
 logger = logging.getLogger(__name__)
 
-def is_date_in_range(period: str, today: datetime) -> bool:
-    try:
-        start_str, end_str = period.split("~")
-        start_month, start_day = map(int, start_str.strip().split("."))
-        if "익년" in end_str:
-            end_str = end_str.replace("익년", "").strip()
-            end_month, end_day = map(int, end_str.split("."))
-            start_date = datetime(today.year, start_month, start_day)
-            end_date = datetime(today.year + 1, end_month, end_day)
-        else:
-            end_month, end_day = map(int, end_str.strip().split("."))
-            start_date = datetime(today.year, start_month, start_day)
-            end_date = datetime(today.year, end_month, end_day)
-        return start_date <= today <= end_date
-    except Exception as e:
-        logger.error(f"is_date_in_range error for period '{period}': {e}")
-        return False
-
 def convert_period_format(period):
+    """ '6.1~6.30' 같은 기간 문자열을 '6월1일 ~ 6월30일' 형식으로 변환 """
     try:
         if period is None:
             return "없음"
@@ -41,15 +23,9 @@ def convert_period_format(period):
                 return f"{int(start_m)}월{int(start_d)}일 ~ {int(end_m)}월{int(end_d)}일"
         else:
             return str(period)
-    except Exception:
+    except Exception as e:
+        logger.error(f"convert_period_format error: {e}")
         return str(period)
-
-def format_period_dict(period_dict):
-    lines = []
-    for region, period in period_dict.items():
-        # 콜론 대신 공백으로 구분해서 출력
-        lines.append(f"{region} {convert_period_format(period)}")
-    return "\n".join(lines)
 
 def get_fish_info(fish_name, fish_data, today=None):
     if today is None:
@@ -58,12 +34,10 @@ def get_fish_info(fish_name, fish_data, today=None):
     fish = fish_data.get(fish_name)
     if not fish:
         return (
-            f"🚫 금어기\n"
-            f"전국 없음\n\n"
-            f"📏 금지체장\n"
-            f"전국 없음\n\n"
-            f"⚠️ 예외사항 없음\n"
-            f"⚠️ 포획비율제한 없음"
+            f"🚫 금어기\n전국: 없음\n\n"
+            f"📏 금지체장\n전국: 없음\n\n"
+            f"⚠️ 예외사항: 없음\n"
+            f"⚠️ 포획비율제한: 없음"
         )
 
     # 이모지 결정
@@ -76,55 +50,48 @@ def get_fish_info(fish_name, fish_data, today=None):
     else:
         emoji = "🐟"
 
-    # 금어기 정보
-    금어기 = fish.get("금어기", "없음")
-    금어기_출력 = ""
-    if isinstance(금어기, dict):
-        기본_금어기 = 금어기.get("전국", None)
-        if 기본_금어기:
-            금어기_출력 += f"전국 {convert_period_format(기본_금어기)}\n"
-        else:
-            금어기_출력 += "전국 없음\n"
-        # 전국 제외 지역별 금어기 출력
-        for 지역, 기간 in 금어기.items():
-            if 지역 == "전국":
-                continue
-            금어기_출력 += f"{지역} {convert_period_format(기간)}\n"
-    else:
-        금어기_출력 = f"전국 {convert_period_format(금어기)}\n"
+    # 금어기 기본과 지역별 분리
+    금어기_전국 = fish.get("금어기", "없음")
+    금어기_지역별 = []
+    for key, value in fish.items():
+        if key.endswith("_금어기") and key != "금어기":
+            지역명 = key[:-4].replace("_", ", ")
+            금어기_지역별.append((지역명, value))
 
-    # 금지체장 정보
-    금지체장 = fish.get("금지체장", "없음")
-    금지체장_출력 = ""
-    if isinstance(금지체장, dict):
-        기본_금지체장 = 금지체장.get("전국", None)
-        if 기본_금지체장:
-            금지체장_출력 += f"전국 {기본_금지체장}\n"
-        else:
-            금지체장_출력 += "전국 없음\n"
-        # 전국 제외 지역별 금지체장 출력
-        for 지역, 내용 in 금지체장.items():
-            if 지역 == "전국":
-                continue
-            금지체장_출력 += f"{지역} {내용}\n"
-    else:
-        금지체장_출력 = f"전국 {금지체장}\n"
+    # 금지체장 기본과 지역별 분리
+    금지체장_전국 = fish.get("금지체장", "없음")
+    금지체장_지역별 = []
+    for key, value in fish.items():
+        if key.endswith("_금지체장") and key != "금지체장":
+            지역명 = key[:-5].replace("_", ", ")
+            금지체장_지역별.append((지역명, value))
 
-    # 예외사항
+    # 예외사항, 포획비율제한
     예외사항 = fish.get("예외사항", "없음")
-    # 포획비율제한
     포획비율 = fish.get("포획비율제한", "없음")
 
-    # 최종 메시지 구성
-    response = (
-        f"{emoji} {fish_name} {emoji}\n\n"
-        f"🚫 금어기\n"
-        f"{금어기_출력.strip()}\n\n"
-        f"📏 금지체장\n"
-        f"{금지체장_출력.strip()}\n\n"
-        f"⚠️ 예외사항 {예외사항}\n"
-        f"⚠️ 포획비율제한 {포획비율}"
-    )
+    # 메시지 조합
+    response = f"{emoji} {fish_name} {emoji}\n\n"
+
+    # 금어기 라벨 (콜론 없이 개행)
+    response += "🚫 금어기\n"
+    response += f"전국: {convert_period_format(금어기_전국)}\n"
+    for region, period in 금어기_지역별:
+        response += f"{region}: {convert_period_format(period)}\n"
+
+    response += "\n"
+
+    # 금지체장 라벨 (콜론 없이 개행)
+    response += "📏 금지체장\n"
+    response += f"전국: {금지체장_전국}\n"
+    for region, limit in 금지체장_지역별:
+        response += f"{region}: {limit}\n"
+
+    response += "\n"
+
+    response += f"⚠️ 예외사항: {예외사항}\n"
+    response += f"⚠️ 포획비율제한: {포획비율}"
 
     return response
+
 
