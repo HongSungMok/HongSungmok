@@ -53,6 +53,32 @@ fish_emojis = {
     "살오징어(오징어)": "🦑",
 }
 
+# 어종 분류 맵 (대표명 기준)
+category_map = {
+    # 어류
+    "갈치": "어류",
+    "말쥐치": "어류",
+    "참조기": "어류",
+    "참홍어": "어류",
+    "조피볼락(우럭)": "어류",
+    "넙치(광어)": "어류",
+    "살오징어(오징어)": "어류",
+
+    # 폐류(조개류 등)
+    "오분자기": "폐류",
+    "제주소라(소라)": "폐류",
+    "키조개": "폐류",
+    "전복(전복류)": "폐류",
+
+    # 게류
+    "대게": "게류",
+    "붉은대게": "게류",
+    "게": "게류",
+
+    # 기타
+    "해삼": "기타",
+}
+
 context = """
 [요약]
 [제1조] 목적 – 수산자원의 보호·회복·조성 등 관리 및 어업인의 소득증대 목적
@@ -119,15 +145,11 @@ def extract_fish_name(user_input: str, fish_list: list) -> str | None:
     return None
 
 def is_date_in_range(period_str: str, date: datetime) -> bool:
-    # '6.1~6.30' 형식이나 '6월 1일 ~ 6월 30일' 등 변형 가능하니 기본 처리
-    # 날짜 범위가 period_str에 포함되는지 판단하는 단순 예제 (필요시 정교화 가능)
+    # 단순 월 포함 검사 (6.1~6.30, 6월 1일 ~ 6월 30일 등 변형 처리 필요 시 수정)
     try:
-        # 6.1~6.30 or 6월 1일 ~ 6월 30일 등을 인식하도록 구현 가능
-        # 여기서는 단순히 "6." 월 정보만 체크하는 예시로 처리
         month = date.month
         if f"{month}." in period_str or period_str.startswith(f"{month}."):
             return True
-        # 그 외 복잡한 경우는 필요에 따라 구현
     except Exception:
         pass
     return False
@@ -196,7 +218,6 @@ def get_fish_info(fish_name: str, fish_data: dict, today: datetime) -> str:
 
     return "\n".join(lines).strip()
 
-
 @app.route("/TAC", methods=["POST"])
 def fishbot():
     body = request.get_json()
@@ -222,18 +243,38 @@ def fishbot():
                         closed_today.append(name)
                         break
         if closed_today:
-            closed_today = sorted(set(closed_today))
+            # 중복 제거 및 정규화
+            closed_today_norm = [normalize_fish_name(fish) for fish in closed_today]
+            closed_today_norm = list(set(closed_today_norm))  # 중복 제거
+
+            # 분류별 리스트 분리
+            fish_grouped = {"어류": [], "폐류": [], "게류": [], "기타": []}
+            for f in closed_today_norm:
+                cat = category_map.get(f, "기타")
+                fish_grouped[cat].append(f)
+
+            # 분류별 정렬
+            for cat in fish_grouped:
+                fish_grouped[cat].sort()
+
+            # 분류 순서대로 합치기
+            ordered_list = []
+            for cat in ["어류", "폐류", "게류", "기타"]:
+                ordered_list.extend(fish_grouped[cat])
+
+            # 출력 라인 생성
             lines = [f"📅 오늘({today.month}월 {today.day}일) 금어기인 어종:"]
             buttons = []
-            for fish in closed_today:
-                emoji = fish_emojis.get(normalize_fish_name(fish), "🐟")
+            for fish in ordered_list:
                 display_name = get_display_name(fish)
+                emoji = fish_emojis.get(fish, "🐟")
                 lines.append(f"- {emoji} {display_name}")
                 buttons.append({
                     "label": display_name,
                     "action": "message",
                     "messageText": fish
                 })
+
             answer = "\n".join(lines)
             return jsonify({
                 "version": "2.0",
