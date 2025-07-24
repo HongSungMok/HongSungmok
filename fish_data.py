@@ -152,7 +152,7 @@ fish_data = {
     "오분자기": {
         "학명": "Sulculus diversicolor diversicolor / aquatilis",
         "제주_금지체장": "각장 4cm 이하",
-        "금어기": "7.1~8.31"
+        "제주_금어기": "7.1~8.31"
     },
     "전복류": {
         "학명": "Haliotis spp.",

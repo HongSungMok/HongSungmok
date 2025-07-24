@@ -19,14 +19,14 @@ synonym_map = {
     "우럭": "조피볼락",
     "광어": "넙치",
     "오징어": "살오징어",
-    # "볼락": "조피볼락", ❌ 이 줄은 제거!
+    "소라": "제주소라"
 }
 
 display_name_map = {
     "조피볼락": "조피볼락(우럭)",
     "넙치": "넙치(광어)",
     "살오징어": "살오징어(오징어)",
-    # "조피볼락": "조피볼락(볼락)" ❌ 이 줄은 제거!
+    "제주소라": "제주소라(소라)"
 }
 
 fish_emojis = {
@@ -38,7 +38,9 @@ fish_emojis = {
     "키조개": "🦪",
     "주꾸미": "🦑",
     "게": "🦀",
-    "해삼": "🌊"
+    "해삼": "🌊",
+    "제주소라": "🐚",
+    "살오징어": "🦑",
 }
 
 context = """
@@ -130,8 +132,8 @@ def format_period(period: str) -> str:
         start_str, end_str = period.split("~")
         start_month, start_day = map(int, start_str.strip().split("."))
         if "익년" in end_str:
-            end_str = end_str.replace("익년", "")
-            end_month, end_day = map(int, end_str.strip().split("."))
+            end_str = end_str.replace("익년", "").strip()
+            end_month, end_day = map(int, end_str.split("."))
             return f"{start_month}월 {start_day}일 ~ 익년 {end_month}월 {end_day}일"
         else:
             end_month, end_day = map(int, end_str.strip().split("."))
@@ -150,7 +152,7 @@ def get_fish_info(fish_name, fish_data, today=None):
         today = datetime.today()
     fish = fish_data.get(fish_name)
     if not fish:
-        return "\n🚫 금어기: 없음\n🚫 금지체장: 없음"
+        return "\n🚫 금어기: 없음\n📏 금지체장: 없음"
 
     금어기 = "없음"
     for key in ["금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기", "지역별_금어기", "금어기_예외"]:
@@ -179,13 +181,16 @@ def get_fish_info(fish_name, fish_data, today=None):
     if 예외사항:
         예외사항 = format_exception_dates(예외사항)
 
-    result = f"\n🚫 금어기: {금어기}\n🚫 금지체장: {금지체장}"
+    result_lines = [
+        f"🚫 금어기: {금어기}",
+        f"📏 금지체장: {금지체장}"
+    ]
     if 예외사항:
-        result += f"\n⚠️ 예외사항: {예외사항}"
+        result_lines.append(f"⚠️ 예외사항: {예외사항}")
     if 포획비율:
-        result += f"\n⚠️ 포획비율제한: {포획비율}"
+        result_lines.append(f"⚠️ 포획비율제한: {포획비율}")
 
-    return result
+    return "\n".join(result_lines)
 
 def extract_fish_name(user_input, fish_list):
     # fish_list를 이름 길이 내림차순 정렬해서 긴 이름부터 매칭
@@ -210,7 +215,7 @@ def fishbot():
                     result.append(name)
                     break
         if result:
-            answer = f"🌟 오늘 금어기 중인 어종:\n" + ", ".join(result)
+            answer = f"🌟 오늘 금어기 중인 어종:\n" + ", ".join(get_display_name(n) for n in result)
             buttons = [{"label": get_display_name(name), "action": "message", "messageText": name} for name in result]
         else:
             answer = "현재 금어기 중인 어종이 없습니다."
@@ -258,13 +263,14 @@ def fishbot():
     fish_name_raw = extract_fish_name(user_input, 주요_어종)
     fish_name_rep = normalize_fish_name(fish_name_raw)
     display_name = get_display_name(fish_name_raw)
+    emoji = fish_emojis.get(fish_name_rep, "🐟")
 
     info = get_fish_info(fish_name_rep, fish_data)
 
     return jsonify({
         "version": "2.0",
         "template": {
-            "outputs": [{"simpleText": {"text": f"🐟{display_name}🐟\n{info.strip()}"}}],
+            "outputs": [{"simpleText": {"text": f"{emoji} {display_name} {emoji}\n{info.strip()}"}}],
             "quickReplies": []
         }
     })
