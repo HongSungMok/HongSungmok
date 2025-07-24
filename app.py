@@ -1,9 +1,9 @@
-from datetime import datetime
 from flask import Flask, request, jsonify
-import os
+from datetime import datetime
 import re
-import logging
+
 from fish_data import fish_data
+from fish_utils import get_fish_info, get_fish_in_season
 
 logging.basicConfig(level=logging.INFO)
 
@@ -167,7 +167,7 @@ def extract_fish_name(user_input, fish_list):
     for name in fish_list:
         if name in user_input:
             return name
-    return None
+    return user_input.replace(" 금어기", "").strip()
 
 @app.route("/TAC", methods=["POST"])
 def fishbot():
@@ -176,7 +176,6 @@ def fishbot():
     today = datetime.today()
     주요_어종 = list(fish_data.keys())
 
-    # 현재 금어기 중인 어종 요청
     if "현재 금어기" in user_input or "오늘 금어기" in user_input:
         result = []
         for name, data in fish_data.items():
@@ -199,7 +198,6 @@ def fishbot():
             }
         })
 
-    # 'X월 금어기 알려줘' 요청
     if "월 금어기" in user_input:
         match = re.search(r"(\d{1,2})월", user_input)
         if match:
@@ -232,11 +230,7 @@ def fishbot():
                 }
             })
 
-    # 어종 이름만 입력한 경우
     fish_name = extract_fish_name(user_input, 주요_어종)
-    if not fish_name:
-        fish_name = user_input.replace(" 금어기", "").strip()
-
     info = get_fish_info(fish_name, fish_data)
     return jsonify({
         "version": "2.0",
