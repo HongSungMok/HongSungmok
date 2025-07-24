@@ -1,7 +1,6 @@
 from datetime import datetime
 from flask import Flask, request, jsonify
 import os
-import traceback
 import re
 import logging
 from fish_data import fish_data
@@ -9,7 +8,6 @@ from fish_data import fish_data
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
-
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -25,7 +23,6 @@ fish_emojis = {
     "게": "🦀",
     "해삼": "🌊"
 }
-
 
 context = """
 [요약]
@@ -118,6 +115,12 @@ def format_period(period: str) -> str:
     except:
         return period
 
+def format_exception_dates(text: str) -> str:
+    pattern = r"(\d{1,2}\.\d{1,2}~\d{1,2}\.\d{1,2})"
+    def replacer(match):
+        return format_period(match.group(1))
+    return re.sub(pattern, replacer, text)
+
 def get_fish_info(fish_name, fish_data, today=None):
     if today is None:
         today = datetime.today()
@@ -131,7 +134,6 @@ def get_fish_info(fish_name, fish_data, today=None):
             value = filter_periods(fish[key], today)
             if value:
                 if isinstance(value, dict):
-                    # ○○: 부분 제거, 그냥 날짜만 출력
                     금어기 = "; ".join(format_period(v) for v in value.values())
                 else:
                     금어기 = format_period(value)
@@ -149,6 +151,9 @@ def get_fish_info(fish_name, fish_data, today=None):
 
     예외사항 = fish.get("금어기_해역_특이사항") or fish.get("금어기_예외") or fish.get("금어기_특정해역") or fish.get("금어기_추가")
     포획비율 = fish.get("포획비율제한")
+
+    if 예외사항:
+        예외사항 = format_exception_dates(예외사항)
 
     result = f"🚫 금어기: {금어기}\n🚫 금지체장: {금지체장}"
     if 예외사항:
