@@ -5,7 +5,7 @@ import logging
 import os
 
 from fish_data import fish_data
-from fish_utils import get_fish_info, get_fish_in_season
+from fish_utils import get_fish_info
 
 logging.basicConfig(level=logging.INFO)
 
