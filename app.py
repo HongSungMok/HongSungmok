@@ -51,6 +51,7 @@ fish_emojis = {
     "해삼": "🌊",
     "제주소라": "🐚",
     "살오징어(오징어)": "🦑",
+    "낙지": "🦑",
 }
 
 category_map = {
@@ -194,16 +195,20 @@ def fishbot():
 
     if any(k in user_input for k in TODAY_CLOSED_KEYWORDS):
         closed_today = []
+        seen = set()
         for name, data in fish_data.items():
             for key in data:
                 if "금어기" in key:
                     period = data[key]
                     periods = period.values() if isinstance(period, dict) else [period]
                     if any(is_date_in_range(p, today) for p in periods):
-                        closed_today.append(name)
+                        norm = normalize_fish_name(name)
+                        if norm not in seen:
+                            closed_today.append(norm)
+                            seen.add(norm)
                         break
 
-        normalized = sorted(set(normalize_fish_name(f) for f in closed_today))
+        normalized = sorted(closed_today)
         grouped = group_fishes_by_category(normalized)
         ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["게류"] + grouped["기타"]
 
@@ -239,13 +244,17 @@ def fishbot():
         month = int(match.group(1))
 
         monthly_closed = []
+        seen = set()
         for name, data in fish_data.items():
             for key in data:
                 if "금어기" in key:
                     period = data[key]
                     periods = period.values() if isinstance(period, dict) else [period]
                     if any(is_month_in_period(p, month) for p in periods):
-                        monthly_closed.append(name)
+                        norm = normalize_fish_name(name)
+                        if norm not in seen:
+                            monthly_closed.append(norm)
+                            seen.add(norm)
                         break
 
         if not monthly_closed:
@@ -254,7 +263,7 @@ def fishbot():
                 "template": {"outputs": [{"simpleText": {"text": f"{month}월 금어기인 어종이 없습니다."}}]}
             })
 
-        normalized = sorted(set(normalize_fish_name(f) for f in monthly_closed))
+        normalized = sorted(monthly_closed)
         grouped = group_fishes_by_category(normalized)
         ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["게류"] + grouped["기타"]
 
