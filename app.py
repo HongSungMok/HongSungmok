@@ -15,17 +15,18 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # 별칭 → 대표명 매핑
-alias_map = {
+synonym_map = {
     "우럭": "조피볼락",
     "광어": "넙치",
     "오징어": "살오징어",
+    # "볼락": "조피볼락", ❌ 이 줄은 제거!
 }
 
-# 표시용 이름
 display_name_map = {
     "조피볼락": "조피볼락(우럭)",
     "넙치": "넙치(광어)",
     "살오징어": "살오징어(오징어)",
+    # "조피볼락": "조피볼락(볼락)" ❌ 이 줄은 제거!
 }
 
 fish_emojis = {
@@ -90,7 +91,7 @@ context = """
 """
 
 def normalize_fish_name(name):
-    return alias_map.get(name, name)
+    return synonym_map.get(name, name)
 
 def get_display_name(name):
     normalized = normalize_fish_name(name)
@@ -187,11 +188,9 @@ def get_fish_info(fish_name, fish_data, today=None):
     return result
 
 def extract_fish_name(user_input, fish_list):
-    for suffix in [" 금어기 알려줘", " 금어기", " 알려줘"]:
-        if user_input.endswith(suffix):
-            user_input = user_input.replace(suffix, "").strip()
-            break
-    for name in fish_list:
+    # fish_list를 이름 길이 내림차순 정렬해서 긴 이름부터 매칭
+    sorted_fish_list = sorted(fish_list, key=len, reverse=True)
+    for name in sorted_fish_list:
         if name in user_input:
             return name
     return user_input
@@ -212,7 +211,7 @@ def fishbot():
                     break
         if result:
             answer = f"🌟 오늘 금어기 중인 어종:\n" + ", ".join(result)
-            buttons = [{"label": name, "action": "message", "messageText": name} for name in result]
+            buttons = [{"label": get_display_name(name), "action": "message", "messageText": name} for name in result]
         else:
             answer = "현재 금어기 중인 어종이 없습니다."
             buttons = []
@@ -243,7 +242,7 @@ def fishbot():
                                 result.append(name)
                                 break
             if result:
-                answer = f"📅 {month}월 금어기 어종:\n" + ", ".join(result)
+                answer = f"📅 {month}월 금어기 어종:\n" + ", ".join(get_display_name(n) for n in result)
                 buttons = [{"label": get_display_name(name), "action": "message", "messageText": name} for name in result]
             else:
                 answer = f"{month}월 금어기 중인 어종이 없습니다."
@@ -265,7 +264,7 @@ def fishbot():
     return jsonify({
         "version": "2.0",
         "template": {
-            "outputs": [{"simpleText": {"text": f"🐟{display_name}🐟{info}"}}],
+            "outputs": [{"simpleText": {"text": f"🐟{display_name}🐟{info.strip()}"}}],
             "quickReplies": []
         }
     })
