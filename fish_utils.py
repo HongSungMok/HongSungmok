@@ -3,6 +3,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def is_date_in_range(period: str, today: datetime) -> bool:
     try:
         start_str, end_str = period.split("~")
@@ -21,6 +22,7 @@ def is_date_in_range(period: str, today: datetime) -> bool:
         logger.error(f"is_date_in_range error for period '{period}': {e}")
         return False
 
+
 def format_period(period: str) -> str:
     try:
         if "고시" in period or "없음" in period:
@@ -37,6 +39,7 @@ def format_period(period: str) -> str:
             return f"{start_month}월{start_day}일 ~ {end_month}월{end_day}일"
     except Exception:
         return period
+
 
 def get_fish_info(fish_name, fish_data, today=None):
     if today is None:
@@ -61,7 +64,7 @@ def get_fish_info(fish_name, fish_data, today=None):
     else:
         emoji = "🐟"
 
-    # 금어기 정보 구성
+    # 전국 금어기 및 지역별 금어기
     금어기_기본 = format_period(fish.get("금어기", "없음"))
     금어기_지역별 = []
     for key in fish:
@@ -70,7 +73,7 @@ def get_fish_info(fish_name, fish_data, today=None):
             값 = format_period(fish[key]) if fish[key] != "없음" else "없음"
             금어기_지역별.append(f"{지역명}: {값}")
 
-    # 금지체장 정보 구성
+    # 전국 금지체장 및 지역별 금지체장
     금지체장_기본 = fish.get("금지체장", "없음")
     금지체장_지역별 = []
     for key in fish:
@@ -78,7 +81,7 @@ def get_fish_info(fish_name, fish_data, today=None):
             지역명 = key.replace("_금지체장", "").replace("_", ", ")
             금지체장_지역별.append(f"{지역명}: {fish[key]}")
 
-    # 예외사항 & 포획비율제한
+    # 예외사항 및 포획비율제한
     예외사항 = (
         fish.get("금어기_해역_특이사항")
         or fish.get("금어기_예외")
@@ -88,7 +91,7 @@ def get_fish_info(fish_name, fish_data, today=None):
     )
     포획비율 = fish.get("포획비율제한", "없음")
 
-    # 응답 메시지 구성
+    # 메시지 조립
     response = f"{emoji} {fish_name} {emoji}\n\n"
 
     # 🚫 금어기
@@ -98,14 +101,13 @@ def get_fish_info(fish_name, fish_data, today=None):
         response += f"{항목}\n"
 
     # 📏 금지체장
-    response += f"\n📏 금지체장\n"
+    response += "\n📏 금지체장\n"
     response += f"전국: {금지체장_기본}\n"
     for 항목 in 금지체장_지역별:
         response += f"{항목}\n"
 
-    # ⚠️ 예외사항
+    # ⚠️ 예외사항, 포획비율제한
     response += f"\n⚠️ 예외사항: {예외사항}\n"
     response += f"⚠️ 포획비율제한: {포획비율}"
 
     return response
-
