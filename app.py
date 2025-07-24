@@ -185,6 +185,75 @@ def extract_fish_name(user_input, fish_names):
 def get_display_name(name):
     return display_name_map.get(name, name)
 
+def format_period(period: str) -> str:
+    # ex: "6.1~6.30" -> "6월1일 ~ 6월30일"
+    try:
+        parts = period.split("~")
+        if len(parts) != 2:
+            return period.strip()
+        start, end = parts
+        start = start.strip().replace(".", "월") + "일"
+        end = end.strip().replace(".", "월") + "일"
+        return f"{start} ~ {end}"
+    except Exception as e:
+        logger.error(f"format_period error for '{period}': {e}")
+        return period
+
+def get_fish_info(fish_name, fish_data, today):
+    data = fish_data.get(fish_name, {})
+    
+    def format_region_period(period):
+        # dict: 여러 지역/기간, str: 전국 단일 기간
+        if not period:
+            return "없음"
+        if isinstance(period, dict):
+            lines = []
+            for region, p in period.items():
+                lines.append(f"{region}: {format_period(p)}")
+            return "\n".join(lines)
+        else:
+            return f"전국: {format_period(period)}"
+    
+    def format_region_text(text):
+        # dict: 여러 지역/내용, str: 전국 단일 내용
+        if not text:
+            return "없음"
+        if isinstance(text, dict):
+            lines = []
+            for region, t in text.items():
+                lines.append(f"{region}: {t}")
+            return "\n".join(lines)
+        else:
+            return f"전국: {text}"
+    
+    lines = []
+    
+    # 금어기
+    lines.append("🚫 금어기")
+    if "금어기" in data:
+        lines.append(format_region_period(data["금어기"]))
+    else:
+        lines.append("없음")
+    lines.append("")
+    
+    # 금지체장
+    lines.append("📏 금지체장")
+    if "금지체장" in data:
+        lines.append(format_region_text(data["금지체장"]))
+    else:
+        lines.append("없음")
+    lines.append("")
+    
+    # 예외사항
+    except_info = data.get("예외사항", "없음")
+    lines.append(f"⚠️ 예외사항: {except_info}")
+    
+    # 포획비율제한
+    catch_ratio = data.get("포획비율제한", "없음")
+    lines.append(f"⚠️ 포획비율제한: {catch_ratio}")
+    
+    return "\n".join(lines)
+
 @app.route("/TAC", methods=["POST"])
 def fishbot():
     body = request.get_json()
