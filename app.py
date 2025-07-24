@@ -104,16 +104,11 @@ context = """
 
 def normalize_fish_name(name: str) -> str:
     name_lower = name.lower()
-    rep = fish_aliases.get(name_lower, name)
-    return rep
+    return fish_aliases.get(name_lower, name)
 
 def get_display_name(name: str) -> str:
     norm = normalize_fish_name(name)
     return display_name_map.get(norm, norm)
-
-def clean_region_name(key: str, suffix: str) -> str:
-    # ex) "제주_금어기" -> "제주"
-    return key[:-len(suffix)].replace("_", " ").strip()
 
 def extract_fish_name(user_input: str, fish_list: list) -> str | None:
     user_input_lower = user_input.lower()
@@ -122,6 +117,85 @@ def extract_fish_name(user_input: str, fish_list: list) -> str | None:
         if name.lower() in user_input_lower:
             return name
     return None
+
+def is_date_in_range(period_str: str, date: datetime) -> bool:
+    # '6.1~6.30' 형식이나 '6월 1일 ~ 6월 30일' 등 변형 가능하니 기본 처리
+    # 날짜 범위가 period_str에 포함되는지 판단하는 단순 예제 (필요시 정교화 가능)
+    try:
+        # 6.1~6.30 or 6월 1일 ~ 6월 30일 등을 인식하도록 구현 가능
+        # 여기서는 단순히 "6." 월 정보만 체크하는 예시로 처리
+        month = date.month
+        if f"{month}." in period_str or period_str.startswith(f"{month}."):
+            return True
+        # 그 외 복잡한 경우는 필요에 따라 구현
+    except Exception:
+        pass
+    return False
+
+def get_fish_info(fish_name: str, fish_data: dict, today: datetime) -> str:
+    data = fish_data.get(fish_name)
+    if not data:
+        return "정보가 없습니다."
+
+    # 금어기 처리
+    closed_keys = [k for k in data if "금어기" in k]
+    closed_basic = None
+    closed_regions = {}
+
+    for key in closed_keys:
+        val = data[key]
+        if key == "금어기":
+            closed_basic = val
+        else:
+            region = key.replace("_금어기", "").replace("_", " ").strip()
+            closed_regions[region] = val
+
+    # 금지체장 처리 (금지체장, 금지체중 둘 다 가능)
+    banned_keys = [k for k in data if "금지체장" in k or "금지체중" in k]
+    banned_basic = None
+    banned_regions = {}
+
+    for key in banned_keys:
+        val = data[key]
+        if key in ["금지체장", "금지체중"]:
+            banned_basic = val
+        else:
+            region = key.replace("_금지체장", "").replace("_금지체중", "").replace("_", " ").strip()
+            banned_regions[region] = val
+
+    # 예외사항, 포획비율제한 처리
+    exception = data.get("예외사항") or data.get("예외")
+    catch_limit = data.get("포획비율제한") or data.get("포획비율")
+
+    lines = []
+
+    # 금어기 출력
+    if closed_basic or closed_regions:
+        lines.append("🚫 금어기:")
+        if closed_basic:
+            lines.append(f"기본: {closed_basic}")
+        for region, period in closed_regions.items():
+            lines.append(f"{region}: {period}")
+        lines.append("")
+
+    # 금지체장 출력
+    if banned_basic or banned_regions:
+        lines.append("📏 금지체장:")
+        if banned_basic:
+            lines.append(f"기본: {banned_basic}")
+        for region, val in banned_regions.items():
+            lines.append(f"{region}: {val}")
+        lines.append("")
+
+    # 예외사항 출력 (있으면)
+    if exception and exception.strip() and exception.strip() != "없음":
+        lines.append(f"⚠️ 예외사항: {exception.strip()}")
+    # 포획비율제한 출력 (있으면)
+    if catch_limit and catch_limit.strip() and catch_limit.strip() != "없음":
+        lines.append(f"⚠️ 포획비율제한: {catch_limit.strip()}")
+
+    return "\n".join(lines).strip()
+
 
 @app.route("/TAC", methods=["POST"])
 def fishbot():
@@ -231,6 +305,7 @@ def fishbot():
             "quickReplies": []
         }
     })
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
