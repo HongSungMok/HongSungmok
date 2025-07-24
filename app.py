@@ -169,7 +169,7 @@ def extract_fish_name(user_input, fish_list):
     for name in fish_list:
         if name in user_input:
             return name
-    return user_input.replace(" 금어기", "").strip()
+    return None
 
 @app.route("/TAC", methods=["POST"])
 def fishbot():
@@ -231,7 +231,15 @@ def fishbot():
                 }
             })
 
+    # 🧩 여기 수정됨: fish_name을 유연하게 파싱
     fish_name = extract_fish_name(user_input, 주요_어종)
+    if not fish_name:
+        fish_name = user_input
+        for suffix in [" 금어기 알려줘", " 금어기", " 알려줘"]:
+            if fish_name.endswith(suffix):
+                fish_name = fish_name.replace(suffix, "").strip()
+                break
+
     info = get_fish_info(fish_name, fish_data)
     return jsonify({
         "version": "2.0",
