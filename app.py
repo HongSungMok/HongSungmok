@@ -264,7 +264,7 @@ def fishbot():
     return jsonify({
         "version": "2.0",
         "template": {
-            "outputs": [{"simpleText": {"text": f"🐟{display_name}🐟{info.strip()}"}}],
+            "outputs": [{"simpleText": {"text": f"🐟{display_name}🐟\n{info.strip()}"}}],
             "quickReplies": []
         }
     })
