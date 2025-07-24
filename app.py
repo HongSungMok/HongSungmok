@@ -1,6 +1,8 @@
 from flask import Flask, request, jsonify
 from datetime import datetime
 import re
+import logging
+import os
 
 from fish_data import fish_data
 from fish_utils import get_fish_info, get_fish_in_season
@@ -126,7 +128,7 @@ def get_fish_info(fish_name, fish_data, today=None):
         today = datetime.today()
     fish = fish_data.get(fish_name)
     if not fish:
-        return f"🚫 금어기: 없음\n🚫 금지체장: 없음"
+        return "🚫 금어기: 없음\n🚫 금지체장: 없음"
 
     금어기 = "없음"
     for key in ["금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기", "지역별_금어기", "금어기_예외"]:
@@ -180,10 +182,9 @@ def fishbot():
         result = []
         for name, data in fish_data.items():
             for key in ["금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기", "지역별_금어기", "금어기_예외"]:
-                if key in data:
-                    if filter_periods(data[key], today):
-                        result.append(name)
-                        break
+                if key in data and filter_periods(data[key], today):
+                    result.append(name)
+                    break
         if result:
             answer = f"🌟 오늘 금어기 중인 어종:\n" + ", ".join(result)
             buttons = [{"label": name, "action": "message", "messageText": name} for name in result]
