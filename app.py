@@ -155,6 +155,8 @@ def is_date_in_range(period: str, today: datetime) -> bool:
 
 def is_month_in_period(period: str, month: int) -> bool:
     try:
+        if not isinstance(period, str):
+            return False
         period_clean = period.split()[0]
         match = re.match(r"(\d{1,2})\.(\d{1,2})\s*~\s*(\d{1,2})\.(\d{1,2})", period_clean)
         if match:
@@ -245,34 +247,64 @@ def fishbot():
 
     # 월 금어기 처리
     if MONTH_CLOSED_KEYWORD in user_input:
-        match = re.search(r"(\d{1,2})월", user_input)
-        if not match:
-            return jsonify({
-                "version": "2.0",
-                "template": {
-                    "outputs": [{"simpleText": {"text": "월 정보를 인식하지 못했습니다. 예: '4월 금어기'"} }],
-                    "quickReplies": []
-                }
-            })
-        month = int(match.group(1))
+    match = re.search(r"(\d{1,2})월", user_input)
+    if not match:
+        return jsonify({
+            "version": "2.0",
+            "template": {
+                "outputs": [{"simpleText": {"text": "월 정보를 인식하지 못했습니다. 예: '4월 금어기'"}}],
+                "quickReplies": []
+            }
+        })
+    month = int(match.group(1))
 
-        monthly_closed = []
-        for name, data in fish_data.items():
-            for key in data:
-                if "금어기" in key:
-                    period = data[key]
-                    periods = period.values() if isinstance(period, dict) else [period]
-                    if any(is_month_in_period(p, month) for p in periods):
-                        monthly_closed.append(name)
-                        break
+    monthly_closed = []
+    for name, data in fish_data.items():
+        for key in data:
+            if "금어기" in key:
+                period = data[key]
+                # period가 dict이면 values(), 아니면 리스트로 감싸기
+                if isinstance(period, dict):
+                    periods = [p for p in period.values() if isinstance(p, str) and p.strip()]
+                elif isinstance(period, str) and period.strip():
+                    periods = [period]
+                else:
+                    periods = []
+                if any(is_month_in_period(p, month) for p in periods):
+                    monthly_closed.append(name)
+                    break
 
-        if not monthly_closed:
-            return jsonify({
-                "version": "2.0",
-                "template": {
-                    "outputs": [{"simpleText": {"text": f"{month}월 금어기인 어종이 없습니다."}}]
-                }
-            })
+    if not monthly_closed:
+        return jsonify({
+            "version": "2.0",
+            "template": {
+                "outputs": [{"simpleText": {"text": f"{month}월 금어기인 어종이 없습니다."}}]
+            }
+        })
+
+    closed_norm = sorted(set(normalize_fish_name(n) for n in monthly_closed))
+    fish_grouped = {"어류": [], "폐류": [], "게류": [], "기타": []}
+    for fish in closed_norm:
+        cat = category_map.get(fish, "기타")
+        fish_grouped[cat].append(fish)
+
+    ordered_list = fish_grouped["어류"] + fish_grouped["폐류"] + fish_grouped["게류"] + fish_grouped["기타"]
+
+    lines = [f"📅 {month}월 금어기 어종:"]
+    buttons = []
+    for fish in ordered_list:
+        disp = get_display_name(fish)
+        emoji = fish_emojis.get(fish, "🐟")
+        lines.append(f"- {emoji} {disp}")
+        buttons.append({"label": disp, "action": "message", "messageText": disp})
+
+    return jsonify({
+        "version": "2.0",
+        "template": {
+            "outputs": [{"simpleText": {"text": "\n".join(lines)}}],
+            "quickReplies": buttons
+        }
+    })
 
         closed_norm = sorted(set(normalize_fish_name(n) for n in monthly_closed))
         fish_grouped = {"어류": [], "폐류": [], "게류": [], "기타": []}
