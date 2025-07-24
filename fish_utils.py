@@ -31,10 +31,10 @@ def format_period(period: str) -> str:
         if "익년" in end_str:
             end_str = end_str.replace("익년", "")
             end_month, end_day = map(int, end_str.split("."))
-            return f"{start_month}월 {start_day}일 ~ 익년 {end_month}월 {end_day}일"
+            return f"{start_month}월{start_day}일 ~ 익년 {end_month}월{end_day}일"
         else:
             end_month, end_day = map(int, end_str.split("."))
-            return f"{start_month}월 {start_day}일 ~ {end_month}월 {end_day}일"
+            return f"{start_month}월{start_day}일 ~ {end_month}월{end_day}일"
     except Exception:
         return period
 
@@ -51,8 +51,8 @@ def get_fish_info(fish_name, fish_data, today=None):
             f"⚠️ 포획비율제한: 없음"
         )
 
-    # 이모지 설정
-    if "전복" in fish_name:
+    # 🐟 또는 🐚 이모지 결정
+    if "전복" in fish_name or "소라" in fish_name:
         emoji = "🐚"
     elif "오징어" in fish_name:
         emoji = "🦑"
@@ -61,30 +61,24 @@ def get_fish_info(fish_name, fish_data, today=None):
     else:
         emoji = "🐟"
 
-    response = f"{emoji} {fish_name} {emoji}\n\n"
-
-    # 금어기
+    # 금어기 정보 구성
     금어기_기본 = format_period(fish.get("금어기", "없음"))
-    금어기_lines = [f"🚫 금어기", f"전국: {금어기_기본}"]
-
-    for key in sorted(fish.keys()):
-        if key.endswith("_금어기") and not any(x in key for x in ["예외", "특이사항", "추가"]):
-            지역 = key.replace("_금어기", "").replace("_", " ")
+    금어기_지역별 = []
+    for key in fish:
+        if key.endswith("_금어기"):
+            지역명 = key.replace("_금어기", "").replace("_", ", ")
             값 = format_period(fish[key]) if fish[key] != "없음" else "없음"
-            금어기_lines.append(f"{지역}: {값}")
-    response += "\n".join(금어기_lines) + "\n\n"
+            금어기_지역별.append(f"{지역명}: {값}")
 
-    # 금지체장
+    # 금지체장 정보 구성
     금지체장_기본 = fish.get("금지체장", "없음")
-    금지체장_lines = [f"📏 금지체장", f"전국: {금지체장_기본}"]
-
-    for key in sorted(fish.keys()):
+    금지체장_지역별 = []
+    for key in fish:
         if key.endswith("_금지체장"):
-            지역 = key.replace("_금지체장", "").replace("_", " ")
-            금지체장_lines.append(f"{지역}: {fish[key]}")
-    response += "\n".join(금지체장_lines) + "\n\n"
+            지역명 = key.replace("_금지체장", "").replace("_", ", ")
+            금지체장_지역별.append(f"{지역명}: {fish[key]}")
 
-    # 예외사항
+    # 예외사항 & 포획비율제한
     예외사항 = (
         fish.get("금어기_해역_특이사항")
         or fish.get("금어기_예외")
@@ -94,7 +88,24 @@ def get_fish_info(fish_name, fish_data, today=None):
     )
     포획비율 = fish.get("포획비율제한", "없음")
 
-    response += f"⚠️ 예외사항: {예외사항}\n"
+    # 응답 메시지 구성
+    response = f"{emoji} {fish_name} {emoji}\n\n"
+
+    # 🚫 금어기
+    response += "🚫 금어기\n"
+    response += f"전국: {금어기_기본}\n"
+    for 항목 in 금어기_지역별:
+        response += f"{항목}\n"
+
+    # 📏 금지체장
+    response += f"\n📏 금지체장\n"
+    response += f"전국: {금지체장_기본}\n"
+    for 항목 in 금지체장_지역별:
+        response += f"{항목}\n"
+
+    # ⚠️ 예외사항
+    response += f"\n⚠️ 예외사항: {예외사항}\n"
     response += f"⚠️ 포획비율제한: {포획비율}"
 
     return response
+
