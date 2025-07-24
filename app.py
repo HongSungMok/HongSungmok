@@ -83,7 +83,25 @@ context = """
 """
 
 def normalize_fish_name(name):
+    """별칭 → 대표명 변환, 없으면 그대로 반환"""
     return alias_map.get(name, name)
+
+def get_display_name(fish_name):
+    """
+    출력용 이름
+    - 별칭이면 대표명(별칭)
+    - 대표명이면 대표명(별칭) 형태(별칭이 있으면)
+    - 별칭/대표명 모두 없으면 그대로
+    """
+    # 입력이 별칭인 경우
+    if fish_name in alias_map:
+        rep_name = alias_map[fish_name]
+        return f"{rep_name}({fish_name})"
+    # 입력이 대표명인 경우, 별칭 찾아 표시
+    for alias, rep in alias_map.items():
+        if rep == fish_name:
+            return f"{fish_name}({alias})"
+    return fish_name
 
 def is_date_in_range(period: str, today: datetime) -> bool:
     try:
@@ -133,60 +151,17 @@ def format_exception_dates(text: str) -> str:
         return format_period(match.group(1))
     return re.sub(pattern, replacer, text)
 
-def get_fish_info(fish_name, fish_data, today=None):
-    if today is None:
-        today = datetime.today()
-    fish = fish_data.get(fish_name)
-    if not fish:
-        return "🚫 금어기: 없음\n🚫 금지체장: 없음"
-
-    금어기 = "없음"
-    for key in ["금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기", "지역별_금어기", "금어기_예외"]:
-        if key in fish:
-            value = filter_periods(fish[key], today)
-            if value:
-                if isinstance(value, dict):
-                    금어기 = "; ".join(format_period(v) for v in value.values())
-                else:
-                    금어기 = format_period(value)
-                break
-            elif isinstance(fish[key], dict):
-                금어기 = "; ".join(format_period(v) for v in fish[key].values())
-                break
-            elif isinstance(fish[key], str):
-                금어기 = format_period(fish[key])
-                break
-
-    금지체장 = fish.get("금지체장") or fish.get("금지체중") or "없음"
-    if isinstance(금지체장, dict):
-        금지체장 = 금지체장.get("기본") or next(iter(금지체장.values()), "없음")
-
-    예외사항 = fish.get("금어기_해역_특이사항") or fish.get("금어기_예외") or fish.get("금어기_특정해역") or fish.get("금어기_추가")
-    포획비율 = fish.get("포획비율제한")
-
-    if 예외사항:
-        예외사항 = format_exception_dates(예외사항)
-
-    result = f"🚫 금어기: {금어기}\n🚫 금지체장: {금지체장}"
-    if 예외사항:
-        result += f"\n⚠️ 예외사항: {예외사항}"
-    if 포획비율:
-        result += f"\n⚠️ 포획비율제한: {포획비율}"
-
-    return result
-
 def extract_fish_name(user_input, fish_list):
+    # fish_list에 포함된 이름 중 입력에 포함된 것을 찾음
     for name in fish_list:
         if name in user_input:
             return name
-    # 별칭 제거도 고려
+    # 별칭 제거도 고려하며
     fish_name = user_input
     for suffix in [" 금어기 알려줘", " 금어기", " 알려줘"]:
         if fish_name.endswith(suffix):
             fish_name = fish_name.replace(suffix, "").strip()
             break
-    # 별칭이면 대표명으로 변환
-    fish_name = normalize_fish_name(fish_name)
     return fish_name
 
 @app.route("/TAC", methods=["POST"])
@@ -204,7 +179,7 @@ def fishbot():
                     result.append(name)
                     break
         if result:
-            # 별칭 → 대표명 변환 후 중복 제거
+            # 대표명 기준으로 중복 제거
             normalized = {normalize_fish_name(n) for n in result}
             normalized_list = list(normalized)
             answer = f"🌟 오늘 금어기 중인 어종:\n" + ", ".join(sorted(normalized_list))
@@ -255,12 +230,16 @@ def fishbot():
                 }
             })
 
-    fish_name = extract_fish_name(user_input, 주요_어종)
-    info = get_fish_info(fish_name, fish_data)
+    fish_name_raw = extract_fish_name(user_input, 주요_어종)
+    fish_name_rep = normalize_fish_name(fish_name_raw)
+    display_name = get_display_name(fish_name_raw)
+
+    info = get_fish_info(fish_name_rep, fish_data)
+
     return jsonify({
         "version": "2.0",
         "template": {
-            "outputs": [{"simpleText": {"text": f"🐟{fish_name}🐟\n\n{info}"}}],
+            "outputs": [{"simpleText": {"text": f"🐟{display_name}🐟\n\n{info}"}}],
             "quickReplies": []
         }
     })
