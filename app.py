@@ -14,6 +14,13 @@ app = Flask(__name__)
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+# 별칭 → 대표명 매핑
+alias_map = {
+    "오징어": "살오징어",
+    "광어": "넙치",
+    "우럭": "조피볼락",
+}
+
 fish_emojis = {
     "갈치": "🐟",
     "참조기": "🐠",
@@ -74,6 +81,9 @@ context = """
 [제67조] 300만 원 이하 벌금:
  • 불법 어획물 방류명령 불이행, 허위 보고, 지정 외 거래 등
 """
+
+def normalize_fish_name(name):
+    return alias_map.get(name, name)
 
 def is_date_in_range(period: str, today: datetime) -> bool:
     try:
@@ -169,7 +179,15 @@ def extract_fish_name(user_input, fish_list):
     for name in fish_list:
         if name in user_input:
             return name
-    return None
+    # 별칭 제거도 고려
+    fish_name = user_input
+    for suffix in [" 금어기 알려줘", " 금어기", " 알려줘"]:
+        if fish_name.endswith(suffix):
+            fish_name = fish_name.replace(suffix, "").strip()
+            break
+    # 별칭이면 대표명으로 변환
+    fish_name = normalize_fish_name(fish_name)
+    return fish_name
 
 @app.route("/TAC", methods=["POST"])
 def fishbot():
@@ -186,8 +204,11 @@ def fishbot():
                     result.append(name)
                     break
         if result:
-            answer = f"🌟 오늘 금어기 중인 어종:\n" + ", ".join(result)
-            buttons = [{"label": name, "action": "message", "messageText": name} for name in result]
+            # 별칭 → 대표명 변환 후 중복 제거
+            normalized = {normalize_fish_name(n) for n in result}
+            normalized_list = list(normalized)
+            answer = f"🌟 오늘 금어기 중인 어종:\n" + ", ".join(sorted(normalized_list))
+            buttons = [{"label": name, "action": "message", "messageText": name} for name in normalized_list]
         else:
             answer = "현재 금어기 중인 어종이 없습니다."
             buttons = []
@@ -203,7 +224,7 @@ def fishbot():
         match = re.search(r"(\d{1,2})월", user_input)
         if match:
             month = int(match.group(1))
-            result = []
+            raw_result = []
             for name, data in fish_data.items():
                 for key in ["금어기", "유자망_금어기", "근해채낚기_연안복합_정치망_금어기", "지역별_금어기", "금어기_예외"]:
                     if key in data:
@@ -211,14 +232,17 @@ def fishbot():
                         if isinstance(periods, dict):
                             for p in periods.values():
                                 if p.startswith(f"{month}.") or f"~{month}." in p:
-                                    result.append(name)
+                                    raw_result.append(name)
                                     break
                         elif isinstance(periods, str):
                             if periods.startswith(f"{month}.") or f"~{month}." in periods:
-                                result.append(name)
+                                raw_result.append(name)
                                 break
+            normalized = {normalize_fish_name(n) for n in raw_result}
+            result = list(normalized)
+
             if result:
-                answer = f"📅 {month}월 금어기 어종:\n" + ", ".join(result)
+                answer = f"📅 {month}월 금어기 어종:\n" + ", ".join(sorted(result))
                 buttons = [{"label": name, "action": "message", "messageText": name} for name in result]
             else:
                 answer = f"{month}월 금어기 중인 어종이 없습니다."
@@ -231,15 +255,7 @@ def fishbot():
                 }
             })
 
-    # 🧩 여기 수정됨: fish_name을 유연하게 파싱
     fish_name = extract_fish_name(user_input, 주요_어종)
-    if not fish_name:
-        fish_name = user_input
-        for suffix in [" 금어기 알려줘", " 금어기", " 알려줘"]:
-            if fish_name.endswith(suffix):
-                fish_name = fish_name.replace(suffix, "").strip()
-                break
-
     info = get_fish_info(fish_name, fish_data)
     return jsonify({
         "version": "2.0",
