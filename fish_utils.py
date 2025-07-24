@@ -4,7 +4,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 def convert_period_format(period):
-    """ '6.1~6.30' 같은 기간 문자열을 '6월1일 ~ 6월30일' 형식으로 변환 """
+    """'6.1~6.30' 같은 문자열을 '6월1일 ~ 6월30일'로 변환"""
     try:
         if period is None:
             return "없음"
@@ -40,7 +40,7 @@ def get_fish_info(fish_name, fish_data, today=None):
             f"⚠️ 포획비율제한: 없음"
         )
 
-    # 이모지 결정
+    # 어종에 따라 이모지 선택
     if "전복" in fish_name or "소라" in fish_name:
         emoji = "🐚"
     elif "오징어" in fish_name:
@@ -50,7 +50,7 @@ def get_fish_info(fish_name, fish_data, today=None):
     else:
         emoji = "🐟"
 
-    # 금어기 기본과 지역별 분리
+    # 금어기 분류
     금어기_전국 = fish.get("금어기", "없음")
     금어기_지역별 = []
     for key, value in fish.items():
@@ -58,7 +58,7 @@ def get_fish_info(fish_name, fish_data, today=None):
             지역명 = key[:-4].replace("_", ", ")
             금어기_지역별.append((지역명, value))
 
-    # 금지체장 기본과 지역별 분리
+    # 금지체장 분류
     금지체장_전국 = fish.get("금지체장", "없음")
     금지체장_지역별 = []
     for key, value in fish.items():
@@ -66,14 +66,14 @@ def get_fish_info(fish_name, fish_data, today=None):
             지역명 = key[:-5].replace("_", ", ")
             금지체장_지역별.append((지역명, value))
 
-    # 예외사항, 포획비율제한
+    # 예외사항 / 포획비율
     예외사항 = fish.get("예외사항", "없음")
     포획비율 = fish.get("포획비율제한", "없음")
 
-    # 메시지 조합
+    # 응답 조합
     response = f"{emoji} {fish_name} {emoji}\n\n"
 
-    # 금어기 라벨 (콜론 없이 개행)
+    # 금어기 출력
     response += "🚫 금어기\n"
     response += f"전국: {convert_period_format(금어기_전국)}\n"
     for region, period in 금어기_지역별:
@@ -81,17 +81,14 @@ def get_fish_info(fish_name, fish_data, today=None):
 
     response += "\n"
 
-    # 금지체장 라벨 (콜론 없이 개행)
+    # 금지체장 출력
     response += "📏 금지체장\n"
     response += f"전국: {금지체장_전국}\n"
-    for region, limit in 금지체장_지역별:
-        response += f"{region}: {limit}\n"
+    for region, size in 금지체장_지역별:
+        response += f"{region}: {size}\n"
 
     response += "\n"
-
     response += f"⚠️ 예외사항: {예외사항}\n"
     response += f"⚠️ 포획비율제한: {포획비율}"
 
     return response
-
-
