@@ -4,6 +4,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 def is_date_in_range(period: str, today: datetime) -> bool:
+    """
+    주어진 기간 문자열이 오늘 날짜(today)에 포함되는지 판단.
+    period 예: "3.1~4.30", "12.1~익년 2.15"
+    """
     try:
         start_str, end_str = period.split("~")
         start_month, start_day = map(int, start_str.strip().split("."))
@@ -22,6 +26,10 @@ def is_date_in_range(period: str, today: datetime) -> bool:
         return False
 
 def format_period(period: str) -> str:
+    """
+    '3.1~4.30' -> '3월 1일 ~ 4월 30일'
+    '12.1~익년 2.15' -> '12월 1일 ~ 익년 2월 15일'
+    """
     try:
         start_str, end_str = period.split("~")
         start_month, start_day = map(int, start_str.strip().split("."))
@@ -34,9 +42,17 @@ def format_period(period: str) -> str:
             end_month, end_day = map(int, end_str.split("."))
             return f"{start_month}월 {start_day}일 ~ {end_month}월 {end_day}일"
     except Exception:
-        return period  # 오류 시 원문 반환
+        return period  # 실패 시 원본 그대로 반환
 
 def get_fish_info(fish_name, fish_data, today=None):
+    """
+    fish_data 내 어종별 금어기, 금지체장, 예외사항, 포획비율제한 정보를
+    보기 좋은 텍스트로 만들어 리턴함.
+
+    fish_data 예시는 keys 중
+    "금어기", "금어기_지역명", "금지체장", "금지체장_지역명", 
+    "금어기_해역_특이사항", "금어기_예외", "포획비율제한" 등이 존재할 수 있음.
+    """
     if today is None:
         today = datetime.today()
 
@@ -49,30 +65,35 @@ def get_fish_info(fish_name, fish_data, today=None):
             f"⚠️ 포획비율제한: 없음"
         )
 
-    # 기본 금어기 및 지역별 금어기 키 리스트 (기본금어기 제외, 예외 키 제외)
-    금어기_지역키 = [k for k in fish.keys() if "금어기" in k and k != "금어기" and not k.endswith("_예외") and not k.endswith("_특이사항") and not k.endswith("_추가")]
-    # 금지체장 지역별 키 (기본 제외)
+    # 금어기 지역별 키 추출 (기본 제외, 특이사항/예외/추가 제외)
+    금어기_지역키 = [
+        k for k in fish.keys() 
+        if "금어기" in k and k != "금어기" 
+        and not k.endswith("_예외") 
+        and not k.endswith("_특이사항") 
+        and not k.endswith("_추가")
+    ]
+
+    # 금지체장 지역별 키 추출 (기본 제외)
     금지체장_지역키 = [k for k in fish.keys() if "금지체장" in k and k != "금지체장"]
 
-    # 기본 금어기
+    # 기본 금어기 및 지역별 금어기 텍스트 준비
     금어기_기본 = fish.get("금어기", "없음")
-    # 지역별 금어기
     금어기_지역별 = []
     for key in 금어기_지역키:
         지역명 = key.replace("_금어기", "").replace("_", " ")
         금어기_지역별.append(f"{지역명}: {fish[key]}")
 
-    # 금어기 기본 명칭 (표시용)
     금어기_기본_명칭 = "전국"
 
-    # 금지체장 기본 및 지역별
+    # 기본 금지체장 및 지역별 금지체장 텍스트 준비
     금지체장_기본 = fish.get("금지체장", "없음")
     금지체장_지역별 = []
     for key in 금지체장_지역키:
         지역명 = key.replace("_금지체장", "").replace("_", " ")
         금지체장_지역별.append(f"{지역명}: {fish[key]}")
 
-    # 예외사항 및 포획비율제한
+    # 예외사항 및 포획비율제한 추출
     예외사항 = (
         fish.get("금어기_해역_특이사항")
         or fish.get("금어기_예외")
@@ -82,20 +103,17 @@ def get_fish_info(fish_name, fish_data, today=None):
     )
     포획비율 = fish.get("포획비율제한", "없음")
 
-    # 출력 조립
+    # 결과 문자열 조립
     response = ""
 
-    # 금어기 출력
     response += f"🚫 금어기 ({금어기_기본_명칭}): {금어기_기본}\n"
     if 금어기_지역별:
         response += "\n".join(f"🚫 {line}" for line in 금어기_지역별) + "\n"
 
-    # 금지체장 출력 (자 모양 이모지 사용)
     response += f"\n📏 금지체장 ({금어기_기본_명칭}): {금지체장_기본}\n"
     if 금지체장_지역별:
         response += "\n".join(f"📏 {line}" for line in 금지체장_지역별) + "\n"
 
-    # 예외사항, 포획비율제한
     response += f"\n⚠️ 예외사항: {예외사항}\n"
     response += f"⚠️ 포획비율제한: {포획비율}"
 
