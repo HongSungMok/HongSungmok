@@ -129,30 +129,32 @@ context = """
  • 불법 어획물 방류명령 불이행, 허위 보고, 지정 외 거래 등
 """
 
+
 def normalize_fish_name(name):
     name = name.strip().lower()
     return fish_aliases.get(name, name).strip()
 
-def get_representative_fish_names():
-    """fish_data 키 전부를 대표명으로 변환해 중복 없이 리스트 반환"""
-    rep_set = set()
-    for key in fish_data.keys():
-        rep = normalize_fish_name(key)
-        rep_set.add(rep)
-    return list(rep_set)
-
 def button_label(name):
-    """대표명에서 괄호 제거: '살오징어(오징어)' -> '살오징어'"""
     return re.sub(r"\(.*?\)", "", name)
 
 def convert_period_format(period):
     try:
-        start, end = period.split("~")
-        start_m, start_d = start.strip().split(".")
-        end_m, end_d = end.strip().split(".")
-        return f"{int(start_m)}월{int(start_d)}일 ~ {int(end_m)}월{int(end_d)}일"
+        if isinstance(period, str):
+            if "고시" in period or "없음" in period:
+                return period
+            start, end = period.split("~")
+            start_m, start_d = start.strip().split(".")
+            end = end.strip()
+            if "익년" in end:
+                end = end.replace("익년", "").strip()
+                end_m, end_d = end.split(".")
+                return f"{int(start_m)}월{int(start_d)}일 ~ 익년 {int(end_m)}월{int(end_d)}일"
+            else:
+                end_m, end_d = end.split(".")
+                return f"{int(start_m)}월{int(start_d)}일 ~ {int(end_m)}월{int(end_d)}일"
+        return str(period)
     except Exception:
-        return period
+        return str(period)
 
 def format_period_dict(period_dict):
     lines = []
@@ -194,10 +196,6 @@ def is_month_in_period(period: str, month: int) -> bool:
         return False
 
 def get_fish_info(fish_name, fish_data, today):
-    # fish_name은 대표명 (예: '넙치(광어)')
-    # fish_data 키는 원본 키라서 대표명과 매칭되는 모든 원본 키에 대해 info 수집 후 통합
-    # 예: '넙치(광어)' → '넙치', '광어' 두 키 정보 모두 합침
-
     # 대표명에서 괄호 안 별칭 추출
     alias_match = re.search(r"\((.*?)\)", fish_name)
     aliases = []
@@ -208,7 +206,6 @@ def get_fish_info(fish_name, fish_data, today):
     keys_to_check = [base_name] + aliases
 
     combined = {}
-    # 여러 키 중 정보가 있을 경우, 우선순위로 병합 (금어기, 금지체장 등)
     for key in keys_to_check:
         key = key.strip()
         data = fish_data.get(key)
@@ -218,49 +215,72 @@ def get_fish_info(fish_name, fish_data, today):
             if k not in combined:
                 combined[k] = v
             else:
-                # 금어기, 금지체장 같이 중복 항목이 있으면 병합 또는 우선순위 처리
-                if isinstance(v, str) and isinstance(combined[k], str):
-                    if k == "금어기" or k == "금지체장":
-                        # 중복 금어기 병합 시 쉼표로 연결(중복 제거)
+                # 금어기, 금지체장 병합 처리 (문자열 or dict)
+                if k in ["금어기", "금지체장"]:
+                    # dict 병합
+                    if isinstance(v, dict) and isinstance(combined[k], dict):
+                        combined[k].update(v)
+                    # 문자열 병합
+                    elif isinstance(v, str) and isinstance(combined[k], str):
                         parts = set(map(str.strip, combined[k].split(',')))
                         parts.update(map(str.strip, v.split(',')))
                         combined[k] = ", ".join(sorted(parts))
-                # dict 병합 등 필요시 확장 가능
+                    # 한쪽만 dict면 dict로 합치기
+                    elif isinstance(v, dict) and isinstance(combined[k], str):
+                        combined[k] = {**{ "전국": combined[k] }, **v}
+                    elif isinstance(v, str) and isinstance(combined[k], dict):
+                        combined[k]["전국"] = combined[k].get("전국", "") + (", " + v if combined[k].get("전국") else v)
+                else:
+                    # 예외사항 등은 우선 기존 값 유지
+                    pass
+
+    # 예외사항 키 후보군 통합
+    예외사항 = combined.get("금어기_예외") or combined.get("금어기_해역_특이사항") or combined.get("금어기_특정해역") or combined.get("금어기_추가") or combined.get("예외사항") or "없음"
+
+    포획비율 = combined.get("포획비율제한", "없음")
 
     lines = []
 
-    # 금어기 표시
-    closed = combined.get("금어기", "정보없음")
-    if closed == "정보없음":
-        lines.append("🚫 금어기: 정보없음")
-    else:
-        lines.append(f"🚫 금어기: {convert_period_format(closed)}" if isinstance(closed, str) else "🚫 금어기:")
-        if isinstance(closed, dict):
-            lines.append(format_period_dict(closed))
-
-    # 금지체장 표시
-    size_limit = combined.get("금지체장", None)
-    if size_limit:
-        if isinstance(size_limit, dict):
-            lines.append("\n📏 금지체장:")
-            lines.append(format_period_dict(size_limit))
+    # 금어기 처리
+    금어기 = combined.get("금어기", "없음")
+    if isinstance(금어기, dict):
+        # "전국" 기본과 지역별 구분 출력
+        전국_금어기 = 금어기.get("전국", "없음")
+        lines.append(f"🚫 금어기\n전국: {convert_period_format(전국_금어기)}")
+        # 지역별 출력(전국 제외)
+        지역별_금어기 = {k: v for k, v in 금어기.items() if k != "전국"}
+        if 지역별_금어기:
+            lines.append(format_period_dict(지역별_금어기))
+    elif isinstance(금어기, str):
+        if 금어기 in ["없음", "정보없음", "고시"]:
+            lines.append(f"🚫 금어기: {금어기}")
         else:
-            lines.append(f"\n📏 금지체장: {size_limit}")
+            lines.append(f"🚫 금어기: {convert_period_format(금어기)}")
+    else:
+        lines.append("🚫 금어기: 없음")
+
+    # 금지체장 처리
+    금지체장 = combined.get("금지체장", "없음")
+    if isinstance(금지체장, dict):
+        전국_금지체장 = 금지체장.get("전국", "없음")
+        lines.append(f"\n📏 금지체장\n전국: {전국_금지체장}")
+        지역별_금지체장 = {k: v for k, v in 금지체장.items() if k != "전국"}
+        if 지역별_금지체장:
+            lines.append(format_period_dict(지역별_금지체장))
+    elif isinstance(금지체장, str):
+        lines.append(f"\n📏 금지체장: {금지체장}")
     else:
         lines.append("\n📏 금지체장: 없음")
 
-    # 예외사항
-    exceptions = combined.get("예외사항", "없음")
-    lines.append(f"\n⚠️ 예외사항: {exceptions}")
-
-    # 포획비율 제한
-    ratio = combined.get("포획비율제한", "없음")
-    lines.append(f"⚠️ 포획비율제한: {ratio}")
+    # 예외사항, 포획비율 제한
+    lines.append(f"\n⚠️ 예외사항: {예외사항}")
+    lines.append(f"⚠️ 포획비율제한: {포획비율}")
 
     return "\n".join(lines)
 
 def group_fishes_by_category(fishes):
     grouped = {"어류": [], "두족류": [], "폐류": [], "게류": [], "기타": []}
+    category_map = {}  # fish별 카테고리 맵 필요(예시 생략)
     for fish in fishes:
         category = category_map.get(fish, "기타")
         grouped.setdefault(category, []).append(fish)
@@ -274,7 +294,7 @@ def fishbot():
 
     today = datetime.today()
 
-    # 1) 오늘 금어기 요청 처리
+    # 오늘 금어기 처리
     if any(k in user_input for k in TODAY_CLOSED_KEYWORDS):
         closed_today = []
         seen = set()
@@ -289,13 +309,11 @@ def fishbot():
                             closed_today.append(norm)
                             seen.add(norm)
                         break
-
         if not closed_today:
             return jsonify({
                 "version": "2.0",
                 "template": {"outputs": [{"simpleText": {"text": f"오늘({today.month}월 {today.day}일) 금어기인 어종이 없습니다."}}]}
             })
-
         normalized = sorted(set(closed_today))
         grouped = group_fishes_by_category(normalized)
         ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["게류"] + grouped["기타"]
@@ -316,7 +334,7 @@ def fishbot():
             }
         })
 
-    # 2) 월 금어기 요청 처리
+    # 월 금어기 처리
     if MONTH_CLOSED_KEYWORD in user_input:
         match = re.search(r"(\d{1,2})월", user_input)
         if not match:
@@ -345,7 +363,6 @@ def fishbot():
                 "version": "2.0",
                 "template": {"outputs": [{"simpleText": {"text": f"{month}월 금어기인 어종이 없습니다."}}]}
             })
-
         normalized = sorted(set(monthly_closed))
         grouped = group_fishes_by_category(normalized)
         ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["게류"] + grouped["기타"]
@@ -366,11 +383,9 @@ def fishbot():
             }
         })
 
-    # 3) 특정 어종 상세정보 요청 처리
-    # fish_data 키 (원본 이름) 목록
+    # 특정 어종 상세정보 요청 처리
     fish_names = list(fish_data.keys())
 
-    # 입력에서 어종명 추출 (별칭 및 원본 키 모두 검색)
     found_fish = None
     lowered_input = user_input.lower()
     for key in fish_names:
@@ -403,6 +418,5 @@ def fishbot():
     })
 
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
