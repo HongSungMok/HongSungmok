@@ -155,7 +155,6 @@ def is_date_in_range(period: str, today: datetime) -> bool:
 
 def is_month_in_period(period: str, month: int) -> bool:
     try:
-        # 복잡한 설명 제거 (예: "4.1~6.30 중 1개월 범위 내 고시" -> "4.1~6.30")
         period_clean = period.split()[0]
         match = re.match(r"(\d{1,2})\.(\d{1,2})\s*~\s*(\d{1,2})\.(\d{1,2})", period_clean)
         if match:
@@ -164,9 +163,7 @@ def is_month_in_period(period: str, month: int) -> bool:
             if start_month <= end_month:
                 return start_month <= month <= end_month
             else:
-                # 예: 12월~2월 (연도 넘어감)
                 return month >= start_month or month <= end_month
-        # 단순 포함 여부도 확인
         return (
             f"{month}." in period
             or f"{month}월" in period
@@ -182,11 +179,9 @@ def normalize_fish_name(name):
     return fish_aliases.get(name.strip().lower(), name.strip())
 
 def extract_fish_name(user_input, fish_names):
-    # 먼저 어종 이름 포함 여부 확인
     for name in fish_names:
         if name in user_input:
             return name
-    # 별칭 포함 여부 확인
     for alias in fish_aliases:
         if alias in user_input:
             return fish_aliases[alias]
@@ -322,7 +317,7 @@ def fishbot():
     return jsonify({
         "version": "2.0",
         "template": {
-            "outputs": [{"simpleText": {"text": f"{emoji} {display_name} {emoji}\n{info.strip()}"}}],
+            "outputs": [{"simpleText": {"text": f"{emoji} {display_name} {emoji}\n\n{info.strip()}"}}],
             "quickReplies": []
         }
     })
