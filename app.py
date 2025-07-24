@@ -148,24 +148,17 @@ def is_date_in_range(period: str, today: datetime) -> bool:
 
 def is_month_in_period(period: str, month: int) -> bool:
     try:
-        if not isinstance(period, str):
+        # '숫자.숫자~숫자.숫자' 형태만 추출
+        match = re.search(r"(\d{1,2})\.\d{1,2}\s*~\s*(\d{1,2})\.\d{1,2}", period)
+        if not match:
             return False
-        period_clean = period.split()[0]
-        match = re.match(r"(\d{1,2})\.(\d{1,2})\s*~\s*(\d{1,2})\.(\d{1,2})", period_clean)
-        if match:
-            start_month = int(match.group(1))
-            end_month = int(match.group(3))
-            if start_month <= end_month:
-                return start_month <= month <= end_month
-            else:
-                return month >= start_month or month <= end_month
-        return (
-            f"{month}." in period
-            or f"{month}월" in period
-            or period.startswith(f"{month}.")
-            or period.endswith(f"{month}.")
-            or f"~ {month}." in period
-        )
+        start_month = int(match.group(1))
+        end_month = int(match.group(2))
+        if start_month <= end_month:
+            return start_month <= month <= end_month
+        else:
+            # 예) 11월~2월 같이 연도 넘는 경우
+            return month >= start_month or month <= end_month
     except Exception as e:
         logger.error(f"is_month_in_period error for period '{period}': {e}")
         return False
@@ -174,6 +167,7 @@ def normalize_fish_name(name):
     return fish_aliases.get(name.strip().lower(), name.strip())
 
 def extract_fish_name(user_input, fish_names):
+    # fish_names는 대표 표준명 리스트 (ex: '조피볼락(우럭)')
     for name in fish_names:
         if name in user_input:
             return name
@@ -184,75 +178,6 @@ def extract_fish_name(user_input, fish_names):
 
 def get_display_name(name):
     return display_name_map.get(name, name)
-
-def format_period(period: str) -> str:
-    # ex: "6.1~6.30" -> "6월1일 ~ 6월30일"
-    try:
-        parts = period.split("~")
-        if len(parts) != 2:
-            return period.strip()
-        start, end = parts
-        start = start.strip().replace(".", "월") + "일"
-        end = end.strip().replace(".", "월") + "일"
-        return f"{start} ~ {end}"
-    except Exception as e:
-        logger.error(f"format_period error for '{period}': {e}")
-        return period
-
-def get_fish_info(fish_name, fish_data, today):
-    data = fish_data.get(fish_name, {})
-    
-    def format_region_period(period):
-        # dict: 여러 지역/기간, str: 전국 단일 기간
-        if not period:
-            return "없음"
-        if isinstance(period, dict):
-            lines = []
-            for region, p in period.items():
-                lines.append(f"{region}: {format_period(p)}")
-            return "\n".join(lines)
-        else:
-            return f"전국: {format_period(period)}"
-    
-    def format_region_text(text):
-        # dict: 여러 지역/내용, str: 전국 단일 내용
-        if not text:
-            return "없음"
-        if isinstance(text, dict):
-            lines = []
-            for region, t in text.items():
-                lines.append(f"{region}: {t}")
-            return "\n".join(lines)
-        else:
-            return f"전국: {text}"
-    
-    lines = []
-    
-    # 금어기
-    lines.append("🚫 금어기")
-    if "금어기" in data:
-        lines.append(format_region_period(data["금어기"]))
-    else:
-        lines.append("없음")
-    lines.append("")
-    
-    # 금지체장
-    lines.append("📏 금지체장")
-    if "금지체장" in data:
-        lines.append(format_region_text(data["금지체장"]))
-    else:
-        lines.append("없음")
-    lines.append("")
-    
-    # 예외사항
-    except_info = data.get("예외사항", "없음")
-    lines.append(f"⚠️ 예외사항: {except_info}")
-    
-    # 포획비율제한
-    catch_ratio = data.get("포획비율제한", "없음")
-    lines.append(f"⚠️ 포획비율제한: {catch_ratio}")
-    
-    return "\n".join(lines)
 
 @app.route("/TAC", methods=["POST"])
 def fishbot():
@@ -314,7 +239,7 @@ def fishbot():
             return jsonify({
                 "version": "2.0",
                 "template": {
-                    "outputs": [{"simpleText": {"text": "월 정보를 인식하지 못했습니다. 예: '4월 금어기'"}}],
+                    "outputs": [{"simpleText": {"text": "월 정보를 인식하지 못했습니다. 예: '4월 금어기'"} }],
                     "quickReplies": []
                 }
             })
