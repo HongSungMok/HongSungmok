@@ -176,7 +176,6 @@ def extract_fish_name(user_input, fish_names):
     return None
 
 def get_display_name(name):
-    # 표시명 반환, 없으면 원본
     return display_name_map.get(name, name)
 
 def group_fishes_by_category(fishes):
@@ -187,8 +186,69 @@ def group_fishes_by_category(fishes):
     return grouped
 
 def button_label(name):
-    # 괄호 안 표준명 제외: "조피볼락(우럭)" → "조피볼락"
+    # 괄호 제거: 예) "살오징어(오징어)" -> "살오징어"
     return re.sub(r"\(.*?\)", "", name)
+
+def convert_period_format(period):
+    # "5.1~7.31" → "5월1일 ~ 7월31일"
+    try:
+        start, end = period.split("~")
+        start_m, start_d = start.strip().split(".")
+        end_m, end_d = end.strip().split(".")
+        return f"{int(start_m)}월{int(start_d)}일 ~ {int(end_m)}월{int(end_d)}일"
+    except Exception:
+        return period
+
+def format_period_dict(period_dict):
+    # 지역별 기간 딕셔너리 → 여러줄 문자열 변환
+    lines = []
+    for region, period in period_dict.items():
+        lines.append(f"{region}: {convert_period_format(period)}")
+    return "\n".join(lines)
+
+def get_fish_info(fish_name, fish_data, today):
+    data = fish_data.get(fish_name)
+    if not data:
+        return "정보가 없습니다."
+
+    lines = []
+
+    # 금어기
+    closed = data.get("금어기")
+    if isinstance(closed, dict):
+        lines.append("🚫 금어기")
+        lines.append(format_period_dict(closed))
+    else:
+        lines.append("🚫 금어기")
+        lines.append(convert_period_format(closed))
+
+    # 금지체장
+    size_limit = data.get("금지체장")
+    if isinstance(size_limit, dict):
+        lines.append("\n📏 금지체장")
+        lines.append(format_period_dict(size_limit))
+    elif size_limit:
+        lines.append(f"\n📏 금지체장\n전국: {size_limit}")
+
+    # 예외사항
+    exceptions = data.get("예외사항", "없음")
+    lines.append(f"\n⚠️ 예외사항: {exceptions}")
+
+    # 포획비율 제한
+    ratio = data.get("포획비율제한", "없음")
+    lines.append(f"⚠️ 포획비율제한: {ratio}")
+
+    return "\n".join(lines)
+
+def remove_duplicates(fish_list):
+    seen = set()
+    result = []
+    for f in fish_list:
+        norm = normalize_fish_name(f)
+        if norm not in seen:
+            seen.add(norm)
+            result.append(norm)
+    return result
 
 @app.route("/TAC", methods=["POST"])
 def fishbot():
@@ -221,7 +281,7 @@ def fishbot():
                 "template": {"outputs": [{"simpleText": {"text": f"오늘({today.month}월 {today.day}일) 금어기인 어종이 없습니다."}}]}
             })
 
-        normalized = sorted(closed_today)
+        normalized = sorted(set(closed_today))
         grouped = group_fishes_by_category(normalized)
         ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["게류"] + grouped["기타"]
 
@@ -271,7 +331,7 @@ def fishbot():
                 "template": {"outputs": [{"simpleText": {"text": f"{month}월 금어기인 어종이 없습니다."}}]}
             })
 
-        normalized = sorted(monthly_closed)
+        normalized = sorted(set(monthly_closed))
         grouped = group_fishes_by_category(normalized)
         ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["게류"] + grouped["기타"]
 
@@ -302,7 +362,7 @@ def fishbot():
     fish_name = normalize_fish_name(fish_name_raw)
     display_name = get_display_name(fish_name)
     emoji = fish_emojis.get(fish_name, "🐟")
-    info = get_fish_info(fish_name, fish_data, today)  # get_fish_info 함수 내에 금어기/금지체장 기간포맷 처리 포함 가정
+    info = get_fish_info(fish_name, fish_data, today)
 
     return jsonify({
         "version": "2.0",
