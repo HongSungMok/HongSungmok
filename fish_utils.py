@@ -13,13 +13,17 @@ def convert_period_format(period):
             if "고시" in period or "없음" in period:
                 return period
             if "~" not in period:
-                return period  # '~' 없는 경우는 그대로 출력
+                return period  # '~' 없는 경우 그대로 반환
 
             start, end = period.split("~", 1)
+
+            # 시작일 처리
             start_m, start_d = start.strip().split(".")
+            start_formatted = f"{int(start_m)}월{int(start_d)}일"
+
             end = end.strip()
 
-            # '익년' 포함 여부 확인
+            # 종료일에서 '익년' 처리 및 조건문자 처리
             suffix = ""
             if "익년" in end:
                 end = end.replace("익년", "").strip()
@@ -28,17 +32,16 @@ def convert_period_format(period):
                     end_m, end_d, extra = match.groups()
                     suffix = f"익년 {int(end_m)}월{int(end_d)}일{extra.strip()}"
                 else:
-                    suffix = end  # 혹은 원래 문자열 그대로 fallback 처리
+                    suffix = end
             else:
-                # 숫자 다음 조건이 붙은 경우 처리
                 match = re.match(r"(\d+)\.(\d+)(.*)", end)
                 if match:
                     end_m, end_d, extra = match.groups()
                     suffix = f"{int(end_m)}월{int(end_d)}일{extra.strip()}"
                 else:
-                    return period  # 파싱 불가 시 원문 반환
+                    suffix = end
 
-            return f"{int(start_m)}월{int(start_d)}일 ~ {suffix}"
+            return f"{start_formatted} ~ {suffix}"
         else:
             return str(period)
     except Exception as e:
