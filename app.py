@@ -73,9 +73,9 @@ category_map = {
     "키조개": "폐류",
     "전복(전복류)": "폐류",
 
-    "대게": "게류",
-    "붉은대게": "게류",
-    "게": "게류",
+    "대게": "갑각류",
+    "붉은대게": "갑각류",
+    "게": "갑각류",
 
     "해삼": "기타",
 }
@@ -197,7 +197,7 @@ def is_month_in_period(period: str, month: int) -> bool:
         return False
 
 def group_fishes_by_category(fishes):
-    grouped = {"어류": [], "두족류": [], "폐류": [], "게류": [], "기타": []}
+    grouped = {"어류": [], "두족류": [], "폐류": [], "갑각류": [], "기타": []}
     for fish in fishes:
         category = category_map.get(fish, "기타")
         grouped.setdefault(category, []).append(fish)
@@ -234,7 +234,7 @@ def fishbot():
             })
         normalized = sorted(set(closed_today))
         grouped = group_fishes_by_category(normalized)
-        ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["게류"] + grouped["기타"]
+        ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["갑각류"] + grouped["기타"]
 
         lines = [f"📅 오늘({today.month}월 {today.day}일) 금어기인 어종:"]
         buttons = []
@@ -286,7 +286,7 @@ def fishbot():
             })
         normalized = sorted(set(monthly_closed))
         grouped = group_fishes_by_category(normalized)
-        ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["게류"] + grouped["기타"]
+        ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["갑각류"] + grouped["기타"]
 
         lines = [f"📅 {month}월 금어기 어종:"]
         buttons = []
@@ -319,55 +319,49 @@ def fishbot():
 
     # 2) 별칭 없으면 fish_names 내 검색 (소문자 비교)
     if not found_fish:
-        for key in fish_names:
-            if key.lower() in lowered_input:
-                found_fish = key
-                break
-
-    if not found_fish:
-    return jsonify({
-        "version": "2.0",
-        "template": {
-            "outputs": [
-                {
-                    "simpleText": {
-                        "text": (
-                            f"❗'{user_input}' 어종의 금어기와 금지체장이 확인되지 않습니다.\n"
-                            "정확한 어종명을 다시 입력해 주세요.\n\n"
-                            "예시 어종: 고등어, 갈치, 참돔, 넙치"
-                        )
+        return jsonify({
+            "version": "2.0",
+            "template": {
+                "outputs": [
+                    {
+                        "simpleText": {
+                            "text": (
+                                f"❗'{user_input}' 어종의 금어기와 금지체장이 확인되지 않습니다.\n"
+                                "정확한 어종명을 다시 입력해 주세요.\n\n"
+                                "예시 어종: 고등어, 갈치, 참돔, 넙치"
+                            )
+                        }
+                    },
+                    {
+                        "basicCard": {
+                            "title": "자주 찾는 어종을 선택해보세요",
+                            "buttons": [
+                                {
+                                    "action": "message",
+                                    "label": "고등어",
+                                    "messageText": "고등어"
+                                },
+                                {
+                                    "action": "message",
+                                    "label": "갈치",
+                                    "messageText": "갈치"
+                                },
+                                {
+                                    "action": "message",
+                                    "label": "참돔",
+                                    "messageText": "참돔"
+                                },
+                                {
+                                    "action": "message",
+                                    "label": "넙치",
+                                    "messageText": "넙치"
+                                }
+                            ]
+                        }
                     }
-                },
-                {
-                    "basicCard": {
-                        "title": "자주 찾는 어종을 선택해보세요",
-                        "buttons": [
-                            {
-                                "action": "message",
-                                "label": "고등어",
-                                "messageText": "고등어"
-                            },
-                            {
-                                "action": "message",
-                                "label": "갈치",
-                                "messageText": "갈치"
-                            },
-                            {
-                                "action": "message",
-                                "label": "참돔",
-                                "messageText": "참돔"
-                            },
-                            {
-                                "action": "message",
-                                "label": "넙치",
-                                "messageText": "넙치"
-                            }
-                        ]
-                    }
-                }
-            ]
-        }
-    })
+                ]
+            }
+        })
 
     rep_name = normalize_fish_name(found_fish)
     disp_name = display_name_map.get(rep_name, rep_name)
