@@ -32,6 +32,15 @@ def get_fish_info(fish_name, fish_data, today=None):
         today = datetime.today()
 
     fish = fish_data.get(fish_name)
+
+    # 2. 없으면 fish_aliases 별칭(key) 중 대표명과 같은 것 찾아서 조회
+    if not fish:
+        for alias, rep in fish_aliases.items():
+            if rep == fish_name:
+                fish = fish_data.get(alias)
+                if fish:
+                    break
+
     if not fish:
         return (
             f"🚫 금어기\n전국: 없음\n\n"
