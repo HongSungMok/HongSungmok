@@ -325,10 +325,49 @@ def fishbot():
                 break
 
     if not found_fish:
-        return jsonify({
-            "version": "2.0",
-            "template": {"outputs": [{"simpleText": {"text": "죄송합니다, 해당 어종을 찾을 수 없습니다. 다시 입력해주세요."}}]}
-        })
+    return jsonify({
+        "version": "2.0",
+        "template": {
+            "outputs": [
+                {
+                    "simpleText": {
+                        "text": (
+                            f"❗'{user_input}' 어종의 금어기와 금지체장이 확인되지 않습니다.\n"
+                            "정확한 어종명을 다시 입력해 주세요.\n\n"
+                            "예시 어종: 고등어, 갈치, 참돔, 넙치"
+                        )
+                    }
+                },
+                {
+                    "basicCard": {
+                        "title": "자주 찾는 어종을 선택해보세요",
+                        "buttons": [
+                            {
+                                "action": "message",
+                                "label": "고등어",
+                                "messageText": "고등어"
+                            },
+                            {
+                                "action": "message",
+                                "label": "갈치",
+                                "messageText": "갈치"
+                            },
+                            {
+                                "action": "message",
+                                "label": "참돔",
+                                "messageText": "참돔"
+                            },
+                            {
+                                "action": "message",
+                                "label": "넙치",
+                                "messageText": "넙치"
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    })
 
     rep_name = normalize_fish_name(found_fish)
     disp_name = display_name_map.get(rep_name, rep_name)
