@@ -4,23 +4,36 @@ import logging
 logger = logging.getLogger(__name__)
 
 def convert_period_format(period):
-    """'6.1~6.30' 같은 문자열을 '6월1일 ~ 6월30일'로 변환"""
+    """'6.1~6.30', '5.1~9.15 중 46일 이상' 등을 '6월1일 ~ 6월30일' 식으로 변환"""
     try:
         if period is None:
             return "없음"
         if isinstance(period, str):
             if "고시" in period or "없음" in period:
                 return period
-            start, end = period.split("~")
+            if "~" not in period:
+                return period  # '~' 없는 경우는 그대로 출력
+
+            start, end = period.split("~", 1)
             start_m, start_d = start.strip().split(".")
             end = end.strip()
+
+            # '익년' 포함 여부 확인
+            suffix = ""
             if "익년" in end:
                 end = end.replace("익년", "").strip()
-                end_m, end_d = end.split(".")
-                return f"{int(start_m)}월{int(start_d)}일 ~ 익년 {int(end_m)}월{int(end_d)}일"
+                end_m, end_d = end.split(".", 1)
+                suffix = f"익년 {int(end_m)}월{int(end_d[:2])}일"
             else:
-                end_m, end_d = end.split(".")
-                return f"{int(start_m)}월{int(start_d)}일 ~ {int(end_m)}월{int(end_d)}일"
+                # 숫자 다음 조건이 붙은 경우 처리
+                match = re.match(r"(\d+)\.(\d+)(.*)", end)
+                if match:
+                    end_m, end_d, extra = match.groups()
+                    suffix = f"{int(end_m)}월{int(end_d)}일{extra.strip()}"
+                else:
+                    return period  # 파싱 불가 시 원문 반환
+
+            return f"{int(start_m)}월{int(start_d)}일 ~ {suffix}"
         else:
             return str(period)
     except Exception as e:
