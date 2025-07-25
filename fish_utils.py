@@ -1,5 +1,6 @@
 from datetime import datetime
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +23,12 @@ def convert_period_format(period):
             suffix = ""
             if "익년" in end:
                 end = end.replace("익년", "").strip()
-                end_m, end_d = end.split(".", 1)
-                suffix = f"익년 {int(end_m)}월{int(end_d[:2])}일"
+                match = re.match(r"(\d+)\.(\d+)(.*)", end)
+                if match:
+                    end_m, end_d, extra = match.groups()
+                    suffix = f"익년 {int(end_m)}월{int(end_d)}일{extra.strip()}"
+                else:
+                    suffix = end  # 혹은 원래 문자열 그대로 fallback 처리
             else:
                 # 숫자 다음 조건이 붙은 경우 처리
                 match = re.match(r"(\d+)\.(\d+)(.*)", end)
@@ -111,3 +116,4 @@ def get_fish_info(fish_name, fish_data, today=None):
     response += f"⚠️ 포획비율제한: {포획비율}"
 
     return response
+
