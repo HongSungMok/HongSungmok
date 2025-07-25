@@ -129,9 +129,18 @@ context = """
  • 불법 어획물 방류명령 불이행, 허위 보고, 지정 외 거래 등
 """
 
-def normalize_fish_name(name):
-    name = name.strip().lower()
-    return fish_aliases.get(name, name).strip()
+def normalize_fish_name(text):
+    text = text.strip().lower()
+    all_names = set(fish_data.keys()) | set(fish_aliases.keys())
+    # 긴 이름부터 매칭 (예: "조피볼락" vs "우럭" 중 더 긴걸 우선)
+    for name in sorted(all_names, key=lambda x: -len(x)):
+        if name.lower() in text:
+            # fish_aliases에 있으면 대체명 리턴, 없으면 원본명 리턴
+            return fish_aliases.get(name, name)
+    return None
+
+def extract_fish_name(text):
+    return normalize_fish_name(text)
 
 def button_label(name):
     # 괄호 제거해서 버튼 라벨로 간단히
@@ -202,17 +211,6 @@ def group_fishes_by_category(fishes):
         category = category_map.get(fish, "기타")
         grouped.setdefault(category, []).append(fish)
     return grouped
-
-# user_input 문장에서 어종명(별칭 or fish_data키) 추출 함수 추가
-def extract_fish_name(text):
-    text = text.lower()
-    for alias in fish_aliases.keys():
-        if alias in text:
-            return fish_aliases[alias]
-    for name in fish_data.keys():
-        if name.lower() in text:
-            return name
-    return None
 
 @app.route("/TAC", methods=["POST"])
 def fishbot():
@@ -319,8 +317,6 @@ def fishbot():
         return jsonify(response)
 
     # 특정 어종 상세정보 요청 처리
-    fish_names = list(fish_data.keys())
-
     found_fish = None
     # 1) 별칭 먼저 검사
     for alias, rep in fish_aliases.items():
@@ -328,35 +324,32 @@ def fishbot():
             found_fish = rep
             break
 
-    # 2) 별칭 없으면 fish_names 내 검색 (소문자 비교)
+    # 2) 별칭 없으면 fish_data 내 검색 (소문자 비교)
     if not found_fish:
         fish_name_in_text = extract_fish_name(lowered_input)
         if fish_name_in_text:
-            display_name = button_label(fish_name_in_text)
+            found_fish = fish_name_in_text
         else:
-            display_name = re.sub(r"(금어기|금지체장|알려줘|좀|부탁해|알려|주세요|알려주세요)", "", user_input).strip()
-            if not display_name:
-                display_name = user_input
+            # 사용자 입력에서 의미 있는 단어 추출
+            cleaned = re.sub(r"(금어기|금지체장|알려줘|좀|부탁해|알려|주세요|정보|어종)", "", user_input).strip()
+            display_name = cleaned if cleaned else user_input
 
-        quick_buttons = []
-        example_fishes = ["고등어", "갈치", "참돔"]
-        for f in example_fishes:
-            quick_buttons.append({"label": f, "action": "message", "messageText": f})
+            quick_buttons = [{"label": f, "action": "message", "messageText": f} for f in ["고등어", "갈치", "참돔"]]
 
-        return jsonify({
-            "version": "2.0",
-            "template": {
-                "outputs": [{
-                    "simpleText": {
-                        "text": (
-                            f"🤔 '{display_name}'의 금어기와 금지체장이 확인되지 않습니다.\n"
-                            "😅 정확한 어종명을 다시 입력해 주세요."
-                        )
-                    }
-                }],
-                "quickReplies": quick_buttons
-            }
-        })
+            return jsonify({
+                "version": "2.0",
+                "template": {
+                    "outputs": [{
+                        "simpleText": {
+                            "text": (
+                                f"🤔 '{display_name}'의 금어기와 금지체장이 확인되지 않습니다.\n"
+                                "😅 정확한 어종명을 다시 입력해 주세요."
+                            )
+                        }
+                    }],
+                    "quickReplies": quick_buttons
+                }
+            })
 
     rep_name = normalize_fish_name(found_fish)
     disp_name = display_name_map.get(rep_name, rep_name)
