@@ -132,11 +132,11 @@ context = """
 
 def normalize_fish_name(text):
     text = text.strip().lower()
+    text = re.sub(r"\(.*?\)", "", text)  # 입력 텍스트에서 괄호 제거
     all_names = set(fish_data.keys()) | set(fish_aliases.keys())
-    # 긴 이름부터 매칭 (예: "조피볼락" vs "우럭" 중 더 긴걸 우선)
     for name in sorted(all_names, key=lambda x: -len(x)):
-        if name.lower() in text:
-            # fish_aliases에 있으면 대체명 리턴, 없으면 원본명 리턴
+        name_key = re.sub(r"\(.*?\)", "", name.lower())  # 이름 키에서도 괄호 제거
+        if name_key in text:
             return fish_aliases.get(name, name)
     return None
 
