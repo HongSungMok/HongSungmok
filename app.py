@@ -232,7 +232,7 @@ def fishbot():
                     periods = period.values() if isinstance(period, dict) else [period]
                     if any(is_date_in_range(p, today) for p in periods):
                         norm = normalize_fish_name(name)
-                        if norm not in seen:
+                        if norm and norm not in seen:
                             closed_today.append(norm)
                             seen.add(norm)
                         break
@@ -283,7 +283,7 @@ def fishbot():
                     periods = period.values() if isinstance(period, dict) else [period]
                     if any(is_month_in_period(p, month) for p in periods):
                         norm = normalize_fish_name(name)
-                        if norm not in seen:
+                        if norm and norm not in seen:
                             monthly_closed.append(norm)
                             seen.add(norm)
                         break
