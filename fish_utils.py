@@ -4,6 +4,7 @@ import re
 
 logger = logging.getLogger(__name__)
 
+
 def convert_period_format(period):
     """'6.1~6.30', '5.1~9.15 중 46일 이상' 등을 '6월1일 ~ 6월30일' 식으로 변환"""
     try:
@@ -48,6 +49,7 @@ def convert_period_format(period):
         logger.error(f"convert_period_format error: {e}")
         return str(period)
 
+
 def get_fish_info(fish_name, fish_data, today=None):
     if today is None:
         today = datetime.today()
@@ -78,18 +80,18 @@ def get_fish_info(fish_name, fish_data, today=None):
     금어기_지역별 = []
     for key, value in fish.items():
         if key.endswith("_금어기") and key != "금어기":
-            지역명 = key.rsplit("_", 1)[0]
-            지역명 = 지역명.replace(",", ", ")
+            지역명 = key.rsplit("_", 1)[0].replace(",", ", ")
             금어기_지역별.append((지역명, value))
 
-    # 금지체장 전국 및 지역별 추출
-    금지체장_전국 = fish.get("금지체장", "없음")
-    금지체장_지역별 = []
+    # 금지체장 또는 금지체중 전국 및 지역별 추출
+    금지기준_전국 = fish.get("금지체장") or fish.get("금지체중") or "없음"
+    기준_이름 = "📏 금지체장" if "금지체장" in fish else ("⚖️ 금지체중" if "금지체중" in fish else "📏 금지체장")
+
+    금지기준_지역별 = []
     for key, value in fish.items():
-        if key.endswith("_금지체장") and key != "금지체장":
-            지역명 = key.rsplit("_", 1)[0]
-            지역명 = 지역명.replace(",", ", ")
-            금지체장_지역별.append((지역명, value))
+        if key.endswith("_금지체장") or key.endswith("_금지체중"):
+            지역명 = key.rsplit("_", 1)[0].replace(",", ", ")
+            금지기준_지역별.append((지역명, value))
 
     # 예외사항 및 포획비율 제한
     예외사항 = fish.get("금어기_예외", fish.get("예외사항", "없음"))
@@ -106,10 +108,10 @@ def get_fish_info(fish_name, fish_data, today=None):
 
     response += "\n"
 
-    # 금지체장 출력
-    response += "📏 금지체장\n"
-    response += f"전국: {금지체장_전국 if 금지체장_전국 else '없음'}\n"
-    for region, size in 금지체장_지역별:
+    # 금지체장 or 금지체중 출력
+    response += f"{기준_이름}\n"
+    response += f"전국: {금지기준_전국}\n"
+    for region, size in 금지기준_지역별:
         response += f"{region}: {size}\n"
 
     response += "\n"
@@ -119,4 +121,5 @@ def get_fish_info(fish_name, fish_data, today=None):
     response += f"⚠️ 포획비율제한: {포획비율}"
 
     return response
+
 
