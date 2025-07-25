@@ -206,11 +206,9 @@ def group_fishes_by_category(fishes):
 # user_input 문장에서 어종명(별칭 or fish_data키) 추출 함수 추가
 def extract_fish_name(text):
     text = text.lower()
-    # 별칭 기준 먼저 검색
     for alias in fish_aliases.keys():
         if alias in text:
             return fish_aliases[alias]
-    # 별칭 없으면 fish_data 키 기준 검색
     for name in fish_data.keys():
         if name.lower() in text:
             return name
@@ -332,31 +330,30 @@ def fishbot():
 
     # 2) 별칭 없으면 fish_names 내 검색 (소문자 비교)
     if not found_fish:
-        # 어종명 추출 시도
         fish_name_in_text = extract_fish_name(lowered_input)
-        display_name = fish_name_in_text if fish_name_in_text else user_input
+        if fish_name_in_text:
+            display_name = button_label(fish_name_in_text)
+        else:
+            display_name = re.sub(r"(금어기|금지체장|알려줘|좀|부탁해|알려|주세요|알려주세요)", "", user_input).strip()
+            if not display_name:
+                display_name = user_input
 
         quick_buttons = []
         example_fishes = ["고등어", "갈치", "참돔"]
         for f in example_fishes:
-            quick_buttons.append({
-                "label": f,
-                "action": "message",
-                "messageText": f
-            })
+            quick_buttons.append({"label": f, "action": "message", "messageText": f})
+
         return jsonify({
             "version": "2.0",
             "template": {
-                "outputs": [
-                    {
-                        "simpleText": {
-                            "text": (
-                                f"🤔 '{display_name}'의 금어기와 금지체장이 확인되지 않습니다.\n"
-                                "😅 정확한 어종명을 다시 입력해 주세요."
-                            )
-                        }
+                "outputs": [{
+                    "simpleText": {
+                        "text": (
+                            f"🤔 '{display_name}'의 금어기와 금지체장이 확인되지 않습니다.\n"
+                            "😅 정확한 어종명을 다시 입력해 주세요."
+                        )
                     }
-                ],
+                }],
                 "quickReplies": quick_buttons
             }
         })
