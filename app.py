@@ -16,7 +16,7 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # 키워드 상수
-TODAY_CLOSED_KEYWORDS = ["현재 금어기", "오늘 금어기", "오늘의 금어기", "금어기 어종"]
+TODAY_CLOSED_KEYWORDS = ["현재 금어기", "지금 금어기", "오늘 금어기", "오늘의 금어기", "금어기 어종"]
 MONTH_CLOSED_KEYWORD = "월 금어기"
 
 # 별칭 및 표시명 통합 딕셔너리 (소문자 키)
@@ -196,91 +196,13 @@ def is_month_in_period(period: str, month: int) -> bool:
         return False
 
 def get_fish_info(fish_name, fish_data, today):
-    # 대표명에서 괄호 안 별칭 추출
-    alias_match = re.search(r"\((.*?)\)", fish_name)
-    aliases = []
-    if alias_match:
-        aliases.append(alias_match.group(1))
-    base_name = re.sub(r"\(.*?\)", "", fish_name)
-
-    keys_to_check = [base_name] + aliases
-
-    combined = {}
-    for key in keys_to_check:
-        key = key.strip()
-        data = fish_data.get(key)
-        if not data:
-            continue
-        for k, v in data.items():
-            if k not in combined:
-                combined[k] = v
-            else:
-                # 금어기, 금지체장 병합 처리 (문자열 or dict)
-                if k in ["금어기", "금지체장"]:
-                    # dict 병합
-                    if isinstance(v, dict) and isinstance(combined[k], dict):
-                        combined[k].update(v)
-                    # 문자열 병합
-                    elif isinstance(v, str) and isinstance(combined[k], str):
-                        parts = set(map(str.strip, combined[k].split(',')))
-                        parts.update(map(str.strip, v.split(',')))
-                        combined[k] = ", ".join(sorted(parts))
-                    # 한쪽만 dict면 dict로 합치기
-                    elif isinstance(v, dict) and isinstance(combined[k], str):
-                        combined[k] = {**{ "전국": combined[k] }, **v}
-                    elif isinstance(v, str) and isinstance(combined[k], dict):
-                        combined[k]["전국"] = combined[k].get("전국", "") + (", " + v if combined[k].get("전국") else v)
-                else:
-                    # 예외사항 등은 우선 기존 값 유지
-                    pass
-
-    # 예외사항 키 후보군 통합
-    예외사항 = combined.get("금어기_예외") or combined.get("금어기_해역_특이사항") or combined.get("금어기_특정해역") or combined.get("금어기_추가") or combined.get("예외사항") or "없음"
-
-    포획비율 = combined.get("포획비율제한", "없음")
-
-    lines = []
-
-    # 금어기 처리
-    금어기 = combined.get("금어기", "없음")
-    if isinstance(금어기, dict):
-        # "전국" 기본과 지역별 구분 출력
-        전국_금어기 = 금어기.get("전국", "없음")
-        lines.append(f"🚫 금어기\n전국: {convert_period_format(전국_금어기)}")
-        # 지역별 출력(전국 제외)
-        지역별_금어기 = {k: v for k, v in 금어기.items() if k != "전국"}
-        if 지역별_금어기:
-            lines.append(format_period_dict(지역별_금어기))
-    elif isinstance(금어기, str):
-        if 금어기 in ["없음", "정보없음", "고시"]:
-            lines.append(f"🚫 금어기: {금어기}")
-        else:
-            lines.append(f"🚫 금어기: {convert_period_format(금어기)}")
-    else:
-        lines.append("🚫 금어기: 없음")
-
-    # 금지체장 처리
-    금지체장 = combined.get("금지체장", "없음")
-    if isinstance(금지체장, dict):
-        전국_금지체장 = 금지체장.get("전국", "없음")
-        lines.append(f"\n📏 금지체장\n전국: {전국_금지체장}")
-        지역별_금지체장 = {k: v for k, v in 금지체장.items() if k != "전국"}
-        if 지역별_금지체장:
-            lines.append(format_period_dict(지역별_금지체장))
-    elif isinstance(금지체장, str):
-        lines.append(f"\n📏 금지체장: {금지체장}")
-    else:
-        lines.append("\n📏 금지체장: 없음")
-
-    # 예외사항, 포획비율 제한
-    lines.append(f"\n⚠️ 예외사항: {예외사항}")
-    lines.append(f"⚠️ 포획비율제한: {포획비율}")
-
-    return "\n".join(lines)
+    # fish_utils.py 내부 함수 호출을 가정하거나 직접 구현 가능
+    # 여기서는 간단히 import한 get_fish_info를 호출
+    from fish_utils import get_fish_info as util_get_fish_info
+    return util_get_fish_info(fish_name, fish_data, today)
 
 def group_fishes_by_category(fishes):
     grouped = {"어류": [], "두족류": [], "폐류": [], "게류": [], "기타": []}
-    category_map = {}  # fish별 카테고리 맵 필요(예시 생략)
     for fish in fishes:
         category = category_map.get(fish, "기타")
         grouped.setdefault(category, []).append(fish)
@@ -293,6 +215,7 @@ def fishbot():
     logger.info(f"Received user input: {user_input}")
 
     today = datetime.today()
+    lowered_input = user_input.lower()
 
     # 오늘 금어기 처리
     if any(k in user_input for k in TODAY_CLOSED_KEYWORDS):
@@ -387,15 +310,15 @@ def fishbot():
     fish_names = list(fish_data.keys())
 
     found_fish = None
-    lowered_input = user_input.lower()
+    # 입력 문장 소문자화 후 alias 및 어종명 매칭
     for key in fish_names:
-        if key in user_input:
+        if key.lower() in lowered_input:
             found_fish = key
             break
     if not found_fish:
         for alias, rep in fish_aliases.items():
             if alias in lowered_input:
-                found_fish = alias
+                found_fish = rep
                 break
 
     if not found_fish:
