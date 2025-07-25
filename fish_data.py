@@ -57,7 +57,7 @@ fish_data = {
         "학명": "Conger myriaster",
         "금지체장": "35cm 이하"
     },
-    "조피볼락": {
+    "조피볼락(우럭)": {
         "학명": "Sebastes schlegelii",
         "금지체장": "23cm 이하"
     },
@@ -197,7 +197,7 @@ fish_data = {
         "학명": "Octopus dofleini",
         "금지체중": "600g 이하"
     },
-    "살오징어": {
+    "살오징어(오징어)": {
         "학명": "Todarodes pacificus",
         "금지체장": "15cm 이하",
         "금어기": "4.1~5.31",
