@@ -134,6 +134,7 @@ def normalize_fish_name(name):
     return fish_aliases.get(name, name).strip()
 
 def button_label(name):
+    # 괄호 제거해서 버튼 라벨로 간단히
     return re.sub(r"\(.*?\)", "", name)
 
 def convert_period_format(period):
@@ -189,16 +190,11 @@ def is_month_in_period(period: str, month: int) -> bool:
         if start_month <= end_month:
             return start_month <= month <= end_month
         else:
+            # 예: 11월~2월 (연도 넘어가는 경우)
             return month >= start_month or month <= end_month
     except Exception as e:
         logger.error(f"is_month_in_period error for period '{period}': {e}")
         return False
-
-def get_fish_info(fish_name, fish_data, today):
-    # fish_utils.py 내부 함수 호출을 가정하거나 직접 구현 가능
-    # 여기서는 간단히 import한 get_fish_info를 호출
-    from fish_utils import get_fish_info as util_get_fish_info
-    return util_get_fish_info(fish_name, fish_data, today)
 
 def group_fishes_by_category(fishes):
     grouped = {"어류": [], "두족류": [], "폐류": [], "게류": [], "기타": []}
@@ -248,13 +244,16 @@ def fishbot():
             lines.append(f"- {emoji} {disp}")
             buttons.append({"label": button_label(disp), "action": "message", "messageText": disp})
 
-        return jsonify({
+        response = {
             "version": "2.0",
             "template": {
-                "outputs": [{"simpleText": {"text": "\n".join(lines)}}],
-                "quickReplies": buttons
+                "outputs": [{"simpleText": {"text": "\n".join(lines)}}]
             }
-        })
+        }
+        if buttons:
+            response["template"]["quickReplies"] = buttons
+
+        return jsonify(response)
 
     # 월 금어기 처리
     if MONTH_CLOSED_KEYWORD in user_input:
@@ -297,27 +296,32 @@ def fishbot():
             lines.append(f"- {emoji} {disp}")
             buttons.append({"label": button_label(disp), "action": "message", "messageText": disp})
 
-        return jsonify({
+        response = {
             "version": "2.0",
             "template": {
-                "outputs": [{"simpleText": {"text": "\n".join(lines)}}],
-                "quickReplies": buttons
+                "outputs": [{"simpleText": {"text": "\n".join(lines)}}]
             }
-        })
+        }
+        if buttons:
+            response["template"]["quickReplies"] = buttons
+
+        return jsonify(response)
 
     # 특정 어종 상세정보 요청 처리
     fish_names = list(fish_data.keys())
 
     found_fish = None
-    # 입력 문장 소문자화 후 alias 및 어종명 매칭
-    for key in fish_names:
-        if key.lower() in lowered_input:
-            found_fish = key
+    # 1) 별칭 먼저 검사
+    for alias, rep in fish_aliases.items():
+        if alias in lowered_input:
+            found_fish = rep
             break
+
+    # 2) 별칭 없으면 fish_names 내 검색 (소문자 비교)
     if not found_fish:
-        for alias, rep in fish_aliases.items():
-            if alias in lowered_input:
-                found_fish = rep
+        for key in fish_names:
+            if key.lower() in lowered_input:
+                found_fish = key
                 break
 
     if not found_fish:
@@ -330,6 +334,8 @@ def fishbot():
     disp_name = display_name_map.get(rep_name, rep_name)
     emoji = fish_emojis.get(rep_name, "🐟")
     info = get_fish_info(rep_name, fish_data, today)
+    if not info.strip():
+        info = f"{disp_name}에 대한 상세 정보를 찾을 수 없습니다."
 
     return jsonify({
         "version": "2.0",
@@ -338,6 +344,7 @@ def fishbot():
             "quickReplies": []
         }
     })
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
