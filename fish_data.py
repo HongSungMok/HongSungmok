@@ -1,6 +1,3 @@
-fish_d
-
-
 fish_data = {
     "문치가자미": {
         "학명": "Pleuronectes yokohamae",
