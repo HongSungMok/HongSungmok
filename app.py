@@ -130,13 +130,11 @@ context = """
  • 불법 어획물 방류명령 불이행, 허위 보고, 지정 외 거래 등
 """
 
-def normalize_fish_name(text):
+ddef normalize_fish_name(text):
     text = text.strip().lower()
     all_names = set(fish_data.keys()) | set(fish_aliases.keys())
-    # 긴 이름부터 매칭 (예: "조피볼락" vs "우럭" 중 더 긴걸 우선)
     for name in sorted(all_names, key=lambda x: -len(x)):
         if name.lower() in text:
-            # fish_aliases에 있으면 대체명 리턴, 없으면 원본명 리턴
             return fish_aliases.get(name, name)
     return None
 
@@ -144,7 +142,6 @@ def extract_fish_name(text):
     return normalize_fish_name(text)
 
 def button_label(name):
-    # 괄호 제거해서 버튼 라벨로 간단히
     return re.sub(r"\(.*?\)", "", name)
 
 def convert_period_format(period):
@@ -200,7 +197,6 @@ def is_month_in_period(period: str, month: int) -> bool:
         if start_month <= end_month:
             return start_month <= month <= end_month
         else:
-            # 예: 11월~2월 (연도 넘어가는 경우)
             return month >= start_month or month <= end_month
     except Exception as e:
         logger.error(f"is_month_in_period error for period '{period}': {e}")
