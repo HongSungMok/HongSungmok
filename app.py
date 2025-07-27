@@ -19,20 +19,22 @@ OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 TODAY_CLOSED_KEYWORDS = ["현재 금어기", "지금 금어기", "오늘 금어기", "오늘의 금어기", "금어기 어종"]
 MONTH_CLOSED_KEYWORD = "월 금어기"
 
-# 별칭 및 표시명 통합 딕셔너리 (모두 소문자 키로 통일)
+# 어종별 별칭 및 대표 표준명 (소문자 키로 통일)
 fish_aliases = {
     '우럭': '조피볼락(우럭)',
+    '조피볼락': '조피볼락(우럭)',
     '광어': '넙치(광어)',
+    '넙치': '넙치(광어)',
     '오징어': '살오징어(오징어)',
-    '살오징어': '살오징어(오징어)',   # 이 줄 추가!
+    '살오징어': '살오징어(오징어)',
     '전복': '전복',
     '전복류': '전복',
     '볼락': '볼락',
-    '조피볼락': '조피볼락(우럭)',
     '소라': '제주소라',
     '제주소라': '제주소라',
 }
 
+# 챗봇에서 사용자에게 표시할 이름
 display_name_map = {
     "조피볼락(우럭)": "조피볼락(우럭)",
     "넙치(광어)": "넙치(광어)",
@@ -40,6 +42,7 @@ display_name_map = {
     "제주소라": "제주소라(소라)"
 }
 
+# 어종별 이모지 (없으면 기본 🐟)
 fish_emojis = {
     "갈치": "🐟",
     "참조기": "🐠",
@@ -55,6 +58,7 @@ fish_emojis = {
     "낙지": "🦑",
 }
 
+# 어종별 분류
 category_map = {
     "갈치": "어류",
     "말쥐치": "어류",
@@ -62,22 +66,18 @@ category_map = {
     "참홍어": "어류",
     "조피볼락(우럭)": "어류",
     "넙치(광어)": "어류",
-
     "살오징어(오징어)": "두족류",
     "낙지": "두족류",
     "참문어": "두족류",
     "쭈꾸미": "두족류",
     "대문어": "두족류",
-
     "오분자기": "폐류",
     "제주소라(소라)": "폐류",
     "키조개": "폐류",
     "전복(전복류)": "폐류",
-
     "대게": "갑각류",
     "붉은대게": "갑각류",
     "게": "갑각류",
-
     "해삼": "기타",
 }
 
@@ -145,6 +145,7 @@ def normalize_fish_name(text):
     return None
 
 def extract_fish_name(text):
+    # 간단히 normalize 함수 호출
     return normalize_fish_name(text)
 
 def button_label(name):
@@ -324,11 +325,9 @@ def fishbot():
     # fish 이름 추출
     found_fish = extract_fish_name(lowered_input)
 
-    # 🐟 fish_data에 있는 어종인 경우
-    if found_fish:
-    rep_name = found_fish  # 이미 canonical name 형태로 반환됨
-    if rep_name in fish_data:
-        fish_info = get_fish_info(rep_name)
+    # fish_data에 있는 어종인 경우
+    if found_fish and found_fish in fish_data:
+        fish_info = get_fish_info(found_fish)
         return jsonify({
             "version": "2.0",
             "template": {
@@ -338,7 +337,7 @@ def fishbot():
             }
         })
 
-    # ❗ fish_data에 없는 어종 처리
+    # fish_data에 없는 어종 처리
     else:
         cleaned = re.sub(r"(금어기|금지체장|알려줘|좀|부탁해|알려|주세요|정보|어종)", "", user_input).strip()
         display_name = cleaned if cleaned else user_input
@@ -358,21 +357,6 @@ def fishbot():
                 "quickReplies": quick_buttons
             }
         })
-
-    rep_name = normalize_fish_name(found_fish)
-    disp_name = display_name_map.get(rep_name, rep_name)
-    emoji = fish_emojis.get(rep_name, "🐟")
-    info = get_fish_info(rep_name, fish_data, today)
-    if not info.strip():
-        info = f"{disp_name}에 대한 상세 정보를 찾을 수 없습니다."
-
-    return jsonify({
-        "version": "2.0",
-        "template": {
-            "outputs": [{"simpleText": {"text": info.strip()}}],
-            "quickReplies": []
-        }
-    })
 
 
 if __name__ == "__main__":
