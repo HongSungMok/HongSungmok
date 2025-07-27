@@ -360,19 +360,23 @@ def fishbot():
         found_fish = normalize_fish_name(lowered_input)
         logger.info(f"Extracted fish name: {found_fish}")
 
-        if found_fish:
-            if found_fish in fish_data:
-                try:
-                    fish_info = get_fish_info(found_fish)
-                    if not fish_info.strip():
-                        fish_info = f"'{found_fish}'의 상세 정보를 찾을 수 없습니다."
-                    logger.info(f"Fish info for '{found_fish}': {fish_info[:100]}")
-                    return jsonify({
-                        "version": "2.0",
-                        "template": {
-                            "outputs": [{"simpleText": {"text": fish_info}}]
-                        }
-                    })
+        if found_fish and found_fish in fish_data:
+    try:
+        info = get_fish_info(found_fish)
+        return jsonify({"version": "2.0", "template": {"outputs": [{"simpleText": {"text": info}}]}})
+    except Exception as e:
+        logger.exception(f"⚠️ '{found_fish}' 처리 중 오류 발생: {e}")
+        return jsonify({
+            "version": "2.0",
+            "template": {
+                "outputs": [{
+                    "simpleText": {
+                        "text": f"⚠️ '{found_fish}' 정보를 처리하는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+                    }
+                }]
+            }
+        })
+
                 except Exception as e:
                     logger.error(f"Error in get_fish_info for '{found_fish}': {e}", exc_info=True)
                     return jsonify({
