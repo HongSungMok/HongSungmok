@@ -144,38 +144,8 @@ def normalize_fish_name(text):
                 return canonical_name
     return None
 
-def extract_fish_name(text):
-    # 간단히 normalize 함수 호출
-    return normalize_fish_name(text)
-
 def button_label(name):
-    # 괄호 제거해서 버튼 라벨로 간단히
     return re.sub(r"\(.*?\)", "", name)
-
-def convert_period_format(period):
-    try:
-        if isinstance(period, str):
-            if "고시" in period or "없음" in period:
-                return period
-            start, end = period.split("~")
-            start_m, start_d = start.strip().split(".")
-            end = end.strip()
-            if "익년" in end:
-                end = end.replace("익년", "").strip()
-                end_m, end_d = end.split(".")
-                return f"{int(start_m)}월{int(start_d)}일 ~ 익년 {int(end_m)}월{int(end_d)}일"
-            else:
-                end_m, end_d = end.split(".")
-                return f"{int(start_m)}월{int(start_d)}일 ~ {int(end_m)}월{int(end_d)}일"
-        return str(period)
-    except Exception:
-        return str(period)
-
-def format_period_dict(period_dict):
-    lines = []
-    for region, period in period_dict.items():
-        lines.append(f"{region}: {convert_period_format(period)}")
-    return "\n".join(lines)
 
 def is_date_in_range(period: str, today: datetime) -> bool:
     try:
@@ -205,7 +175,6 @@ def is_month_in_period(period: str, month: int) -> bool:
         if start_month <= end_month:
             return start_month <= month <= end_month
         else:
-            # 예: 11월~2월 (연도 넘어가는 경우)
             return month >= start_month or month <= end_month
     except Exception as e:
         logger.error(f"is_month_in_period error for period '{period}': {e}")
@@ -228,112 +197,110 @@ def fishbot():
         today = datetime.today()
         lowered_input = user_input.lower()
 
-    # 오늘 금어기 처리
-    if any(k in user_input for k in TODAY_CLOSED_KEYWORDS):
-        closed_today = []
-        seen = set()
-        for name, data in fish_data.items():
-            for key in data:
-                if "금어기" in key:
-                    period = data[key]
-                    periods = period.values() if isinstance(period, dict) else [period]
-                    if any(is_date_in_range(p, today) for p in periods):
-                        norm = normalize_fish_name(name)
-                        if norm and norm not in seen:
-                            closed_today.append(norm)
-                            seen.add(norm)
-                        break
-        if not closed_today:
-            return jsonify({
+        # 오늘 금어기 처리
+        if any(k in user_input for k in TODAY_CLOSED_KEYWORDS):
+            closed_today = []
+            seen = set()
+            for name, data in fish_data.items():
+                for key in data:
+                    if "금어기" in key:
+                        period = data[key]
+                        periods = period.values() if isinstance(period, dict) else [period]
+                        if any(is_date_in_range(p, today) for p in periods):
+                            norm = normalize_fish_name(name)
+                            if norm and norm not in seen:
+                                closed_today.append(norm)
+                                seen.add(norm)
+                            break
+            if not closed_today:
+                return jsonify({
+                    "version": "2.0",
+                    "template": {"outputs": [{"simpleText": {"text": f"오늘({today.month}월 {today.day}일) 금어기인 어종이 없습니다."}}]}
+                })
+            normalized = sorted(set(closed_today))
+            grouped = group_fishes_by_category(normalized)
+            ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["갑각류"] + grouped["기타"]
+
+            lines = [f"📅 오늘({today.month}월 {today.day}일) 금어기인 어종:"]
+            buttons = []
+            for fish in ordered:
+                disp = display_name_map.get(fish, fish)
+                emoji = fish_emojis.get(fish, "🐟")
+                lines.append(f"- {emoji} {disp}")
+                buttons.append({"label": button_label(disp), "action": "message", "messageText": disp})
+
+            response = {
                 "version": "2.0",
-                "template": {"outputs": [{"simpleText": {"text": f"오늘({today.month}월 {today.day}일) 금어기인 어종이 없습니다."}}]}
-            })
-        normalized = sorted(set(closed_today))
-        grouped = group_fishes_by_category(normalized)
-        ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["갑각류"] + grouped["기타"]
-
-        lines = [f"📅 오늘({today.month}월 {today.day}일) 금어기인 어종:"]
-        buttons = []
-        for fish in ordered:
-            disp = display_name_map.get(fish, fish)
-            emoji = fish_emojis.get(fish, "🐟")
-            lines.append(f"- {emoji} {disp}")
-            buttons.append({"label": button_label(disp), "action": "message", "messageText": disp})
-
-        response = {
-            "version": "2.0",
-            "template": {
-                "outputs": [{"simpleText": {"text": "\n".join(lines)}}]
+                "template": {
+                    "outputs": [{"simpleText": {"text": "\n".join(lines)}}]
+                }
             }
-        }
-        if buttons:
-            response["template"]["quickReplies"] = buttons
+            if buttons:
+                response["template"]["quickReplies"] = buttons
 
-        return jsonify(response)
+            return jsonify(response)
 
-    # 월 금어기 처리
-    if MONTH_CLOSED_KEYWORD in user_input:
-        match = re.search(r"(\d{1,2})월", user_input)
-        if not match:
-            return jsonify({
+        # 월 금어기 처리
+        if MONTH_CLOSED_KEYWORD in user_input:
+            match = re.search(r"(\d{1,2})월", user_input)
+            if not match:
+                return jsonify({
+                    "version": "2.0",
+                    "template": {"outputs": [{"simpleText": {"text": "월 정보를 인식하지 못했습니다. 예: '4월 금어기'"}}]}
+                })
+            month = int(match.group(1))
+
+            monthly_closed = []
+            seen = set()
+            for name, data in fish_data.items():
+                for key in data:
+                    if "금어기" in key:
+                        period = data[key]
+                        periods = period.values() if isinstance(period, dict) else [period]
+                        if any(is_month_in_period(p, month) for p in periods):
+                            norm = normalize_fish_name(name)
+                            if norm and norm not in seen:
+                                monthly_closed.append(norm)
+                                seen.add(norm)
+                            break
+
+            if not monthly_closed:
+                return jsonify({
+                    "version": "2.0",
+                    "template": {"outputs": [{"simpleText": {"text": f"{month}월 금어기인 어종이 없습니다."}}]}
+                })
+            normalized = sorted(set(monthly_closed))
+            grouped = group_fishes_by_category(normalized)
+            ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["갑각류"] + grouped["기타"]
+
+            lines = [f"📅 {month}월 금어기 어종:"]
+            buttons = []
+            for fish in ordered:
+                disp = display_name_map.get(fish, fish)
+                emoji = fish_emojis.get(fish, "🐟")
+                lines.append(f"- {emoji} {disp}")
+                buttons.append({"label": button_label(disp), "action": "message", "messageText": disp})
+
+            response = {
                 "version": "2.0",
-                "template": {"outputs": [{"simpleText": {"text": "월 정보를 인식하지 못했습니다. 예: '4월 금어기'"}}]}
-            })
-        month = int(match.group(1))
-
-        monthly_closed = []
-        seen = set()
-        for name, data in fish_data.items():
-            for key in data:
-                if "금어기" in key:
-                    period = data[key]
-                    periods = period.values() if isinstance(period, dict) else [period]
-                    if any(is_month_in_period(p, month) for p in periods):
-                        norm = normalize_fish_name(name)
-                        if norm and norm not in seen:
-                            monthly_closed.append(norm)
-                            seen.add(norm)
-                        break
-
-        if not monthly_closed:
-            return jsonify({
-                "version": "2.0",
-                "template": {"outputs": [{"simpleText": {"text": f"{month}월 금어기인 어종이 없습니다."}}]}
-            })
-        normalized = sorted(set(monthly_closed))
-        grouped = group_fishes_by_category(normalized)
-        ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["갑각류"] + grouped["기타"]
-
-        lines = [f"📅 {month}월 금어기 어종:"]
-        buttons = []
-        for fish in ordered:
-            disp = display_name_map.get(fish, fish)
-            emoji = fish_emojis.get(fish, "🐟")
-            lines.append(f"- {emoji} {disp}")
-            buttons.append({"label": button_label(disp), "action": "message", "messageText": disp})
-
-        response = {
-            "version": "2.0",
-            "template": {
-                "outputs": [{"simpleText": {"text": "\n".join(lines)}}]
+                "template": {
+                    "outputs": [{"simpleText": {"text": "\n".join(lines)}}]
+                }
             }
-        }
-        if buttons:
-            response["template"]["quickReplies"] = buttons
+            if buttons:
+                response["template"]["quickReplies"] = buttons
 
-        return jsonify(response)
+            return jsonify(response)
 
-    # fish 이름 추출
+        # 어종명 추출 및 정보 출력
         found_fish = normalize_fish_name(lowered_input)
         logger.info(f"Extracted fish name: {found_fish}")
 
         if found_fish:
-            # fish_data에 해당 어종 있는 경우
             if found_fish in fish_data:
                 try:
                     fish_info = get_fish_info(found_fish)
                     if not fish_info.strip():
-                        # 빈 문자열 반환시 안내
                         fish_info = f"'{found_fish}'의 상세 정보를 찾을 수 없습니다."
                     logger.info(f"Fish info for '{found_fish}': {fish_info[:100]}")
                     return jsonify({
@@ -355,7 +322,6 @@ def fishbot():
                         }
                     })
             else:
-                # fish_data에 없는 어종
                 cleaned = re.sub(r"(금어기|금지체장|알려줘|좀|부탁해|알려|주세요|정보|어종)", "", user_input).strip()
                 display_name = cleaned if cleaned else user_input
                 quick_buttons = [{"label": f, "action": "message", "messageText": f} for f in ["고등어", "갈치", "참돔"]]
@@ -375,7 +341,6 @@ def fishbot():
                     }
                 })
         else:
-            # 어종명 아예 못 찾은 경우
             quick_buttons = [{"label": f, "action": "message", "messageText": f} for f in ["고등어", "갈치", "참돔"]]
             return jsonify({
                 "version": "2.0",
