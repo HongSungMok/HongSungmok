@@ -234,6 +234,23 @@ def group_fishes_by_category(fishes):
         grouped.setdefault(category, []).append(fish)
     return grouped
 
+def get_fish_info(name):
+    data = fish_data.get(name)
+    if not data:
+        return ""
+
+    lines = [f"어종명: {display_name_map.get(name, name)}"]
+    for key, val in data.items():
+        try:
+            if isinstance(val, dict):
+                val_str = ", ".join(f"{k}: {v}" for k, v in val.items())
+            else:
+                val_str = str(val).strip()
+            lines.append(f"{key}: {val_str}")
+        except Exception as e:
+            lines.append(f"{key}: 정보 처리 중 오류")
+    return "\n".join(lines)
+
 @app.route("/TAC", methods=["POST"])
 def fishbot():
     try:
