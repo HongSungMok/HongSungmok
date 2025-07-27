@@ -317,40 +317,40 @@ def fishbot():
 
         return jsonify(response)
 
-    # 특정 어종 상세정보 요청 처리
-    found_fish = None
-    # 1) 별칭 먼저 검사
-    for alias, rep in fish_aliases.items():
-        if alias in lowered_input:
-            found_fish = rep
-            break
-
-    # 2) 별칭 없으면 fish_data 내 검색 (소문자 비교)
-    if not found_fish:
-        fish_name_in_text = extract_fish_name(lowered_input)
-        if fish_name_in_text:
-            found_fish = fish_name_in_text
-        else:
-            # 사용자 입력에서 의미 있는 단어 추출
-            cleaned = re.sub(r"(금어기|금지체장|알려줘|좀|부탁해|알려|주세요|정보|어종)", "", user_input).strip()
-            display_name = cleaned if cleaned else user_input
-
-            quick_buttons = [{"label": f, "action": "message", "messageText": f} for f in ["고등어", "갈치", "참돔"]]
-
-            return jsonify({
-                "version": "2.0",
-                "template": {
-                    "outputs": [{
-                        "simpleText": {
-                            "text": (
-                                f"🤔 '{display_name}'의 금어기와 금지체장이 확인되지 않습니다.\n"
-                                "😅 정확한 어종명을 다시 입력해 주세요."
-                            )
-                        }
-                    }],
-                    "quickReplies": quick_buttons
+if found_fish and found_fish in fish_data:
+    fish_info = get_fish_info(found_fish)
+    return jsonify({
+        "version": "2.0",
+        "template": {
+            "outputs": [{
+                "simpleText": {
+                    "text": fish_info
                 }
-            })
+            }]
+        }
+    })
+
+# ❗ fish_data에 없는 어종 처리
+else:
+    # 어종 이름 추출 실패 또는 존재하지 않는 어종
+    cleaned = re.sub(r"(금어기|금지체장|알려줘|좀|부탁해|알려|주세요|정보|어종)", "", user_input).strip()
+    display_name = cleaned if cleaned else user_input
+    quick_buttons = [{"label": f, "action": "message", "messageText": f} for f in ["고등어", "갈치", "참돔"]]
+
+    return jsonify({
+        "version": "2.0",
+        "template": {
+            "outputs": [{
+                "simpleText": {
+                    "text": (
+                        f"🤔 '{display_name}'의 금어기와 금지체장이 확인되지 않습니다.\n"
+                        "😅 정확한 어종명을 다시 입력해 주세요."
+                    )
+                }
+            }],
+            "quickReplies": quick_buttons
+        }
+    })
 
     rep_name = normalize_fish_name(found_fish)
     disp_name = display_name_map.get(rep_name, rep_name)
