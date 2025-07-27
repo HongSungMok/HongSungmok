@@ -132,8 +132,8 @@ context = """
 
 def normalize_fish_name(text):
     text = text.strip().lower()
-    text = re.sub(r"\(.*?\)", "", text)  # 괄호 제거
-    text = re.sub(r"[^\uAC00-\uD7A3a-zA-Z0-9]", "", text)  # 특수문자 제거
+    text = re.sub(r"\(.*?\)", "", text)
+    text = re.sub(r"[^\uAC00-\uD7A3a-zA-Z0-9]", "", text)
     all_names = set(fish_data.keys()) | set(fish_aliases.keys())
     for name in sorted(all_names, key=lambda x: -len(x)):
         name_key = re.sub(r"\(.*?\)", "", name.lower())
@@ -220,12 +220,13 @@ def group_fishes_by_category(fishes):
 
 @app.route("/TAC", methods=["POST"])
 def fishbot():
-    body = request.get_json()
-    user_input = body.get("userRequest", {}).get("utterance", "").strip()
-    logger.info(f"Received user input: {user_input}")
+    try:
+        body = request.get_json()
+        user_input = body.get("userRequest", {}).get("utterance", "").strip()
+        logger.info(f"Received user input: {user_input}")
 
-    today = datetime.today()
-    lowered_input = user_input.lower()
+        today = datetime.today()
+        lowered_input = user_input.lower()
 
     # 오늘 금어기 처리
     if any(k in user_input for k in TODAY_CLOSED_KEYWORDS):
@@ -323,41 +324,82 @@ def fishbot():
         return jsonify(response)
 
     # fish 이름 추출
-    found_fish = extract_fish_name(lowered_input)
+        found_fish = normalize_fish_name(lowered_input)
+        logger.info(f"Extracted fish name: {found_fish}")
 
-    # fish_data에 있는 어종인 경우
-    if found_fish and found_fish in fish_data:
-        fish_info = get_fish_info(found_fish)
-        return jsonify({
-            "version": "2.0",
-            "template": {
-                "outputs": [{
-                    "simpleText": {"text": fish_info}
-                }]
-            }
-        })
+        if found_fish:
+            # fish_data에 해당 어종 있는 경우
+            if found_fish in fish_data:
+                try:
+                    fish_info = get_fish_info(found_fish)
+                    if not fish_info.strip():
+                        # 빈 문자열 반환시 안내
+                        fish_info = f"'{found_fish}'의 상세 정보를 찾을 수 없습니다."
+                    logger.info(f"Fish info for '{found_fish}': {fish_info[:100]}")
+                    return jsonify({
+                        "version": "2.0",
+                        "template": {
+                            "outputs": [{"simpleText": {"text": fish_info}}]
+                        }
+                    })
+                except Exception as e:
+                    logger.error(f"Error in get_fish_info for '{found_fish}': {e}", exc_info=True)
+                    return jsonify({
+                        "version": "2.0",
+                        "template": {
+                            "outputs": [{
+                                "simpleText": {
+                                    "text": f"⚠️ '{found_fish}' 정보를 처리하는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+                                }
+                            }]
+                        }
+                    })
+            else:
+                # fish_data에 없는 어종
+                cleaned = re.sub(r"(금어기|금지체장|알려줘|좀|부탁해|알려|주세요|정보|어종)", "", user_input).strip()
+                display_name = cleaned if cleaned else user_input
+                quick_buttons = [{"label": f, "action": "message", "messageText": f} for f in ["고등어", "갈치", "참돔"]]
 
-    # fish_data에 없는 어종 처리
-    else:
-        cleaned = re.sub(r"(금어기|금지체장|알려줘|좀|부탁해|알려|주세요|정보|어종)", "", user_input).strip()
-        display_name = cleaned if cleaned else user_input
-        quick_buttons = [{"label": f, "action": "message", "messageText": f} for f in ["고등어", "갈치", "참돔"]]
-
+                return jsonify({
+                    "version": "2.0",
+                    "template": {
+                        "outputs": [{
+                            "simpleText": {
+                                "text": (
+                                    f"🤔 '{display_name}'의 금어기와 금지체장이 확인되지 않습니다.\n"
+                                    "😅 정확한 어종명을 다시 입력해 주세요."
+                                )
+                            }
+                        }],
+                        "quickReplies": quick_buttons
+                    }
+                })
+        else:
+            # 어종명 아예 못 찾은 경우
+            quick_buttons = [{"label": f, "action": "message", "messageText": f} for f in ["고등어", "갈치", "참돔"]]
+            return jsonify({
+                "version": "2.0",
+                "template": {
+                    "outputs": [{
+                        "simpleText": {
+                            "text": "🤔 어종명을 인식하지 못했습니다. 정확한 어종명을 입력해 주세요."
+                        }
+                    }],
+                    "quickReplies": quick_buttons
+                }
+            })
+    except Exception as e:
+        logger.error(f"Unexpected error in fishbot: {e}", exc_info=True)
         return jsonify({
             "version": "2.0",
             "template": {
                 "outputs": [{
                     "simpleText": {
-                        "text": (
-                            f"🤔 '{display_name}'의 금어기와 금지체장이 확인되지 않습니다.\n"
-                            "😅 정확한 어종명을 다시 입력해 주세요."
-                        )
+                        "text": "⚠️ 알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
                     }
-                }],
-                "quickReplies": quick_buttons
+                }]
             }
         })
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
