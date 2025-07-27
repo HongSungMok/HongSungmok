@@ -132,12 +132,16 @@ context = """
 
 def normalize_fish_name(text):
     text = text.strip().lower()
-    text = re.sub(r"\(.*?\)", "", text)  # 입력 텍스트에서 괄호 제거
+    text = re.sub(r"\(.*?\)", "", text)  # 괄호 제거
+    text = re.sub(r"[^\uAC00-\uD7A3a-zA-Z0-9]", "", text)  # 특수문자 제거
     all_names = set(fish_data.keys()) | set(fish_aliases.keys())
     for name in sorted(all_names, key=lambda x: -len(x)):
-        name_key = re.sub(r"\(.*?\)", "", name.lower())  # 이름 키에서도 괄호 제거
+        name_key = re.sub(r"\(.*?\)", "", name.lower())
+        name_key = re.sub(r"[^\uAC00-\uD7A3a-zA-Z0-9]", "", name_key)
         if name_key in text:
-            return fish_aliases.get(name, name)
+            canonical_name = fish_aliases.get(name, name)
+            if canonical_name in fish_data:
+                return canonical_name
     return None
 
 def extract_fish_name(text):
@@ -321,8 +325,10 @@ def fishbot():
     found_fish = extract_fish_name(lowered_input)
 
     # 🐟 fish_data에 있는 어종인 경우
-    if found_fish and found_fish in fish_data:
-        fish_info = get_fish_info(found_fish)
+    if found_fish:
+    rep_name = found_fish  # 이미 canonical name 형태로 반환됨
+    if rep_name in fish_data:
+        fish_info = get_fish_info(rep_name)
         return jsonify({
             "version": "2.0",
             "template": {
