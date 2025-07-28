@@ -132,7 +132,6 @@ def normalize_fish_name(text):
         name_key = re.sub(r"\(.*?\)", "", name.lower())
         name_key = re.sub(r"[^\uAC00-\uD7A3a-zA-Z0-9]", "", name_key)
         if name_key in text:
-            # fish_aliases에 있을 경우 표준명 반환
             canonical = fish_aliases.get(name, name)
             if canonical in fish_data:
                 return canonical
@@ -168,7 +167,7 @@ def is_month_in_period(period, month):
         end_month = int(match.group(2))
         if start_month <= end_month:
             return start_month <= month <= end_month
-        else:  # 연말-익년 연결 구간
+        else:
             return month >= start_month or month <= end_month
     except Exception as e:
         logger.error(f"is_month_in_period error: {e}")
@@ -275,36 +274,36 @@ def fishbot():
         found_fish = normalize_fish_name(user_input)
         logger.info(f"Normalized fish: {found_fish}")
 
-        if found_fish:
-            try:
-                info = get_fish_info(found_fish, fish_data)
-                return jsonify({
-                    "version": "2.0",
-                    "template": {"outputs": [{"simpleText": {"text": info}}]}
-                })
-            except Exception as e:
-                logger.exception(f"{found_fish} 처리 오류: {e}")
-                return jsonify({
-                    "version": "2.0",
-                    "template": {
-                        "outputs": [{"simpleText": {"text": f"⚠️ '{found_fish}' 정보를 처리하는 중 오류가 발생했습니다."}}]
-                    }
-                })
+        # 어종 존재 확인 추가
+        if found_fish is None or found_fish not in fish_data:
+            cleaned = re.sub(r"(금어기|금지체장|알려줘|알려|주세요|정보|어종|좀|)", "", user_input).strip()
+            display_name = cleaned if cleaned else user_input
+            return jsonify({
+                "version": "2.0",
+                "template": {
+                    "outputs": [{
+                        "simpleText": {
+                            "text": f"🤔 '{display_name}'의 금어기 및 금지체장 정보가 없습니다.\n정확한 어종명을 다시 입력해 주세요."
+                        }
+                    }],
+                    "quickReplies": [{"label": f, "action": "message", "messageText": f} for f in ["고등어", "갈치", "참돔"]]
+                }
+            })
 
-        # 어종 미인식 또는 기타 처리
-        cleaned = re.sub(r"(금어기|금지체장|알려줘|알려|주세요|정보|어종|좀|)", "", user_input).strip()
-        display_name = cleaned if cleaned else user_input
-        return jsonify({
-            "version": "2.0",
-            "template": {
-                "outputs": [{
-                    "simpleText": {
-                        "text": f"🤔 '{display_name}'의 금어기 및 금지체장 정보가 없습니다.\n정확한 어종명을 다시 입력해 주세요."
-                    }
-                }],
-                "quickReplies": [{"label": f, "action": "message", "messageText": f} for f in ["고등어", "갈치", "참돔"]]
-            }
-        })
+        try:
+            info = get_fish_info(found_fish, fish_data)
+            return jsonify({
+                "version": "2.0",
+                "template": {"outputs": [{"simpleText": {"text": info}}]}
+            })
+        except Exception as e:
+            logger.exception(f"{found_fish} 처리 오류: {e}")
+            return jsonify({
+                "version": "2.0",
+                "template": {
+                    "outputs": [{"simpleText": {"text": f"⚠️ '{found_fish}' 정보를 처리하는 중 오류가 발생했습니다."}}]
+                }
+            })
 
     except Exception as e:
         logger.exception(f"fishbot 전체 오류: {e}")
