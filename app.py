@@ -157,11 +157,12 @@ def is_date_in_range(period, today):
 
 def is_month_in_period(period, month):
     try:
+        # 정규식 그룹 번호 수정: group(2) end_month
         match = re.search(r"(\d{1,2})\.\d{1,2}\s*~\s*(\d{1,2})\.\d{1,2}", period)
         if not match:
             return False
         start_month = int(match.group(1))
-        end_month = int(match.group(3))
+        end_month = int(match.group(2))
         if start_month <= end_month:
             return start_month <= month <= end_month
         else:
@@ -180,6 +181,17 @@ def group_fishes_by_category(fishes):
 def button_label(name):
     return display_name_map.get(name, re.sub(r"\(.*?\)", "", name))
 
+def check_month_in_all_closed_periods(data, month):
+    for key, value in data.items():
+        if "금어기" in key and value:
+            # dict 타입이면 value.values()로 처리, 아니면 리스트로 감싼다
+            periods = value.values() if isinstance(value, dict) else [value]
+            for period in periods:
+                if "~" in period:  # ~ 있어야만 기간 인식
+                    if is_month_in_period(period, month):
+                        return True
+    return False
+
 @app.route("/TAC", methods=["POST"])
 def fishbot():
     try:
@@ -188,8 +200,6 @@ def fishbot():
         logger.info(f"User input: {user_input}")
 
         today = datetime.today()
-
-        # 오늘 금어기 질문 처리 (생략 가능)
 
         # 월 금어기 질문 처리
         if MONTH_CLOSED_KEYWORD in user_input:
@@ -203,11 +213,10 @@ def fishbot():
             month = int(match.group(1))
             monthly_closed = set()
             for name, data in fish_data.items():
-                for key, value in data.items():
-                    if "금어기" in key:
-                        periods = value.values() if isinstance(value, dict) else [value]
-                        if any(is_month_in_period(p, month) for p in periods):
-                            monthly_closed.add(name)
+                if check_month_in_all_closed_periods(data, month):
+                    norm = normalize_fish_name(name)
+                    if norm:
+                        monthly_closed.add(norm)
 
             if not monthly_closed:
                 return jsonify({
