@@ -58,7 +58,7 @@ def get_fish_info(fish_name, fish_data):
         emoji = "🐚"
     elif "오징어" in fish_name:
         emoji = "🦑"
-    elif "쭈꾸미" in fish_name or "문어" in fish_name or "낙지" in fish_name:
+    elif "주꾸미" in fish_name or "문어" in fish_name or "낙지" in fish_name:
         emoji = "🐙"
     elif "게" in fish_name or "대게" in fish_name or "꽃게" in fish_name:
         emoji = "🦀"
