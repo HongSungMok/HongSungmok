@@ -157,7 +157,6 @@ def is_date_in_range(period, today):
 
 def is_month_in_period(period, month):
     try:
-        # 정규식 그룹 번호 수정: group(2) end_month
         match = re.search(r"(\d{1,2})\.\d{1,2}\s*~\s*(\d{1,2})\.\d{1,2}", period)
         if not match:
             return False
@@ -184,13 +183,14 @@ def button_label(name):
 def check_month_in_all_closed_periods(data, month):
     for key, value in data.items():
         if "금어기" in key and value:
-            # dict 타입이면 value.values()로 처리, 아니면 리스트로 감싼다
             periods = value.values() if isinstance(value, dict) else [value]
             for period in periods:
-                if "~" in period:  # ~ 있어야만 기간 인식
+                if period and "~" in period:
                     if is_month_in_period(period, month):
                         return True
     return False
+
+app = Flask(__name__)
 
 @app.route("/TAC", methods=["POST"])
 def fishbot():
@@ -201,7 +201,6 @@ def fishbot():
 
         today = datetime.today()
 
-        # 월 금어기 질문 처리
         if MONTH_CLOSED_KEYWORD in user_input:
             match = re.search(r"(\d{1,2})월", user_input)
             if not match:
@@ -243,7 +242,6 @@ def fishbot():
                 }
             })
 
-        # 개별 어종 질문 처리
         found_fish = normalize_fish_name(user_input)
         logger.info(f"Normalized fish: {found_fish}")
 
@@ -263,7 +261,6 @@ def fishbot():
                     }
                 })
 
-        # 어종 인식 실패 응답
         cleaned = re.sub(r"(금어기|금지체장|알려줘|알려|주세요|정보|어종|좀|)", "", user_input).strip()
         display_name = cleaned if cleaned else user_input
         return jsonify({
@@ -287,5 +284,6 @@ def fishbot():
         })
 
 if __name__ == "__main__":
+    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
