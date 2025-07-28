@@ -90,6 +90,7 @@ fish_emojis = {
     "꽃게": "🦀",
     "해삼": "🌊",
     "미역":"🌿",
+    "넓미역":"🌿",
     "우뭇가사리": "🌿",
     "톳": "🌿",
     "제주소라": "🐚",
@@ -309,7 +310,7 @@ def fishbot():
             "template": {
                 "outputs": [{
                     "simpleText": {
-                        "text": f"🤔 '{display_name}'의 금어기 및 금지체장 정보.\n정확한 어종명을 다시 입력해 주세요."
+                        "text": f"🤔 '{display_name}'의 금어기 및 금지체장 정보가 없습니다.\n정확한 어종명을 다시 입력해 주세요."
                     }
                 }],
                 "quickReplies": [{"label": f, "action": "message", "messageText": f} for f in ["고등어", "갈치", "참돔"]]
