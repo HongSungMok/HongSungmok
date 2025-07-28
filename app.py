@@ -80,15 +80,18 @@ display_name_map = {
 
 # 어종별 이모지 맵핑
 fish_emojis = {
-    "갈치": "🐟",
-    "참조기": "🐠",
     "대게": "🦀",
     "붉은대게": "🦀",
     "오분자기": "🐚",
     "키조개": "🦪",
-    "주꾸미": "🦑",
-    "게": "🦀",
+    "주꾸미": "🐙",
+    "대문어": "🐙",
+    "참문어": "🐙",
+    "꽃게": "🦀",
     "해삼": "🌊",
+    "미역":"🌿",
+    "우뭇가사리": "🌿",
+    "톳": "🌿",
     "제주소라": "🐚",
     "살오징어(오징어)": "🦑",
     "낙지": "🦑",
@@ -268,13 +271,27 @@ def fishbot():
         found_fish = normalize_fish_name(user_input)
         logger.info(f"Normalized fish: {found_fish}")
 
-        if found_fish and found_fish in fish_data:
+        if found_fish:
             try:
                 info = get_fish_info(found_fish, fish_data)
-                return jsonify({
-                    "version": "2.0",
-                    "template": {"outputs": [{"simpleText": {"text": info}}]}
-                })
+                # get_fish_info에서 전국 없음 메시지를 기본으로 줬다면
+                if "전국: 없음" in info:
+                    return jsonify({
+                        "version": "2.0",
+                        "template": {
+                            "outputs": [{
+                                "simpleText": {
+                                    "text": f"🤔 '{button_label(found_fish)}'에 대한 금어기 및 금지체장 정보가 없습니다."
+                                }
+                            }],
+                            "quickReplies": [{"label": f, "action": "message", "messageText": f} for f in ["고등어", "갈치", "참돔"]]
+                        }
+                    })
+                else:
+                    return jsonify({
+                        "version": "2.0",
+                        "template": {"outputs": [{"simpleText": {"text": info}}]}
+                    })
             except Exception as e:
                 logger.exception(f"{found_fish} 처리 오류: {e}")
                 return jsonify({
@@ -284,7 +301,7 @@ def fishbot():
                     }
                 })
 
-        # 정보 없는 어종 처리
+        # 어종 미인식 또는 기타
         cleaned = re.sub(r"(금어기|금지체장|알려줘|알려|주세요|정보|어종|좀|)", "", user_input).strip()
         display_name = cleaned if cleaned else user_input
         return jsonify({
@@ -292,7 +309,7 @@ def fishbot():
             "template": {
                 "outputs": [{
                     "simpleText": {
-                        "text": f"🤔 '{display_name}'의 정보를 확인할 수 없습니다.\n정확한 어종명을 다시 입력해 주세요."
+                        "text": f"🤔 '{display_name}'의 금어기 및 금지체장 정보.\n정확한 어종명을 다시 입력해 주세요."
                     }
                 }],
                 "quickReplies": [{"label": f, "action": "message", "messageText": f} for f in ["고등어", "갈치", "참돔"]]
