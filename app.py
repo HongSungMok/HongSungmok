@@ -200,6 +200,7 @@ def fishbot():
                             norm = normalize_fish_name(name)
                             if norm:
                                 closed_today.add(norm)
+
             if not closed_today:
                 return jsonify({
                     "version": "2.0",
@@ -292,7 +293,7 @@ def fishbot():
                     }
                 })
 
-        # 어종 인식 실패 응답
+        # 어종 인식 실패: '없음'으로 출력
         cleaned = re.sub(r"(금어기|금지체장|알려줘|알려|주세요|정보|어종|좀|)", "", user_input).strip()
         display_name = cleaned if cleaned else user_input
         return jsonify({
@@ -300,10 +301,9 @@ def fishbot():
             "template": {
                 "outputs": [{
                     "simpleText": {
-                        "text": f"🔍 '{display_name}'의 금어기 및 금지체장 정보가 없습니다.\n❓어종 정보를 다시 확인해 주세요."
+                        "text": f"🔍 {display_name} 🔍\n\n🚫 금어기\n전국: 없음\n\n📏 금지체장\n전국: 없음"
                     }
-                }],
-                "quickReplies": [{"label": f, "action": "message", "messageText": f} for f in ["고등어", "갈치", "참돔"]]
+                }]
             }
         })
 
