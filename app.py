@@ -125,11 +125,13 @@ def normalize_fish_name(text):
     text = text.lower()
     text = re.sub(r"\(.*?\)", "", text)
     text = re.sub(r"[^\uAC00-\uD7A3a-zA-Z0-9]", "", text)
+
     all_names = set(fish_data.keys()) | set(fish_aliases.keys())
     for name in sorted(all_names, key=lambda x: -len(x)):
         name_key = re.sub(r"\(.*?\)", "", name.lower())
         name_key = re.sub(r"[^\uAC00-\uD7A3a-zA-Z0-9]", "", name_key)
         if name_key in text:
+            # fish_aliases에 있을 경우 표준명 반환
             canonical = fish_aliases.get(name, name)
             if canonical in fish_data:
                 return canonical
@@ -275,24 +277,10 @@ def fishbot():
         if found_fish:
             try:
                 info = get_fish_info(found_fish, fish_data)
-                # get_fish_info에서 전국 없음 메시지를 기본으로 줬다면
-                if "전국: 없음" in info:
-                    return jsonify({
-                        "version": "2.0",
-                        "template": {
-                            "outputs": [{
-                                "simpleText": {
-                                    "text": f"🤔 '{button_label(found_fish)}'에 대한 금어기 및 금지체장 정보가 없습니다."
-                                }
-                            }],
-                            "quickReplies": [{"label": f, "action": "message", "messageText": f} for f in ["고등어", "갈치", "참돔"]]
-                        }
-                    })
-                else:
-                    return jsonify({
-                        "version": "2.0",
-                        "template": {"outputs": [{"simpleText": {"text": info}}]}
-                    })
+                return jsonify({
+                    "version": "2.0",
+                    "template": {"outputs": [{"simpleText": {"text": info}}]}
+                })
             except Exception as e:
                 logger.exception(f"{found_fish} 처리 오류: {e}")
                 return jsonify({
@@ -302,7 +290,7 @@ def fishbot():
                     }
                 })
 
-        # 어종 미인식 또는 기타
+        # 어종 미인식 또는 기타 처리
         cleaned = re.sub(r"(금어기|금지체장|알려줘|알려|주세요|정보|어종|좀|)", "", user_input).strip()
         display_name = cleaned if cleaned else user_input
         return jsonify({
@@ -325,7 +313,6 @@ def fishbot():
                 "outputs": [{"simpleText": {"text": "⚠️ 알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."}}]
             }
         })
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
