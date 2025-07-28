@@ -165,6 +165,7 @@ def is_month_in_period(period, month):
         if start_month <= end_month:
             return start_month <= month <= end_month
         else:
+            # 연도 경계 넘어가는 경우
             return month >= start_month or month <= end_month
     except Exception as e:
         logger.error(f"is_month_in_period error: {e}")
@@ -185,12 +186,10 @@ def check_month_in_all_closed_periods(data, month):
         if "금어기" in key and value:
             periods = value.values() if isinstance(value, dict) else [value]
             for period in periods:
-                if period and "~" in period:
+                if "~" in period:  # 반드시 기간 형식이어야 함
                     if is_month_in_period(period, month):
                         return True
     return False
-
-app = Flask(__name__)
 
 @app.route("/TAC", methods=["POST"])
 def fishbot():
@@ -201,6 +200,7 @@ def fishbot():
 
         today = datetime.today()
 
+        # 월 금어기 질문 처리
         if MONTH_CLOSED_KEYWORD in user_input:
             match = re.search(r"(\d{1,2})월", user_input)
             if not match:
@@ -242,6 +242,7 @@ def fishbot():
                 }
             })
 
+        # 개별 어종 질문 처리
         found_fish = normalize_fish_name(user_input)
         logger.info(f"Normalized fish: {found_fish}")
 
@@ -261,6 +262,7 @@ def fishbot():
                     }
                 })
 
+        # 어종 인식 실패 응답
         cleaned = re.sub(r"(금어기|금지체장|알려줘|알려|주세요|정보|어종|좀|)", "", user_input).strip()
         display_name = cleaned if cleaned else user_input
         return jsonify({
@@ -284,6 +286,5 @@ def fishbot():
         })
 
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
