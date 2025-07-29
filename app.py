@@ -288,17 +288,23 @@ def fishbot():
             if not today_closed:
                 return jsonify({
                     "version": "2.0",
-                    "template": {"outputs": [{"simpleText": {"text": f"\ud83d\udcc5 \uc624\ub298({today.month}\uc6d4 {today.day}\uc77c) \uae08\uc5b4\uae30 \uc5b4\uc885\uc740 \uc5c6\uc2b5\ub2c8\ub2e4."}}]}
+                    "template": {"outputs": [{"simpleText": {"text": f"📅 오늘({today.month}월 {today.day}일) 금어기 어종은 없습니다."}}]}
                 })
 
             grouped = group_fishes_by_category(sorted(today_closed))
-            ordered = grouped["\uc5b4\ub8cc"] + grouped["\ub450\uc875\ub958"] + grouped["\ud3ec\ub958"] + grouped["\uac11\uac01\ub958"] + grouped["\uae30\ud0c0"]
+            ordered = (
+                grouped.get("어류", []) +
+                grouped.get("두족류", []) +
+                grouped.get("폐류", []) +
+                grouped.get("갑각류", []) +
+                grouped.get("기타", [])
+            )
 
-            lines = [f"\ud83d\udcc5 \uc624\ub298({today.month}\uc6d4 {today.day}\uc77c) \uae08\uc5b4\uae30 \uc5b4\uc885:"]
+            lines = [f"📅 오늘({today.month}월 {today.day}일) 금어기 어종:"]
             buttons = []
             for fish in ordered:
                 disp = display_name_map.get(fish, fish)
-                emoji = fish_emojis.get(fish, "\ud83d\udc1f")
+                emoji = fish_emojis.get(fish, "🐟")
                 lines.append(f"- {emoji} {disp}")
                 buttons.append({"label": button_label(fish), "action": "message", "messageText": disp})
 
@@ -310,13 +316,13 @@ def fishbot():
                 }
             })
 
-        # \uc6d4 \uae08\uc5b4\uae30 \uc9c8\ubb38 \ucc98\ub9ac
+        # 월 금어기 질문 처리
         if MONTH_CLOSED_KEYWORD in user_input:
-            match = re.search(r"(\d{1,2})\uc6d4", user_input)
+            match = re.search(r"(\d{1,2})월", user_input)
             if not match:
                 return jsonify({
                     "version": "2.0",
-                    "template": {"outputs": [{"simpleText": {"text": "\uc6d4 \uc815\ubcf4\ub97c \uc778\uc2dd\ud558\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4. \uc608: '4\uc6d4 \uae08\uc5b4\uae30'"}}]}
+                    "template": {"outputs": [{"simpleText": {"text": "월 정보를 인식하지 못했습니다. 예: '4월 금어기'"}}]}
                 })
 
             month = int(match.group(1))
@@ -330,17 +336,23 @@ def fishbot():
             if not monthly_closed:
                 return jsonify({
                     "version": "2.0",
-                    "template": {"outputs": [{"simpleText": {"text": f"{month}\uc6d4 \uae08\uc5b4\uae30\uc778 \uc5b4\uc885\uc774 \uc5c6\uc2b5\ub2c8\ub2e4."}}]}
+                    "template": {"outputs": [{"simpleText": {"text": f"{month}월 금어기인 어종이 없습니다."}}]}
                 })
 
             grouped = group_fishes_by_category(sorted(monthly_closed))
-            ordered = grouped["\uc5b4\ub8cc"] + grouped["\ub450\uc875\ub958"] + grouped["\ud3ec\ub958"] + grouped["\uac11\uac01\ub958"] + grouped["\uae30\ud0c0"]
+            ordered = (
+                grouped.get("어류", []) +
+                grouped.get("두족류", []) +
+                grouped.get("폐류", []) +
+                grouped.get("갑각류", []) +
+                grouped.get("기타", [])
+            )
 
-            lines = [f"\ud83d\udcc5 {month}\uc6d4 \uae08\uc5b4\uae30 \uc5b4\uc885:"]
+            lines = [f"📅 {month}월 금어기 어종:"]
             buttons = []
             for fish in ordered:
                 disp = display_name_map.get(fish, fish)
-                emoji = fish_emojis.get(fish, "\ud83d\udc1f")
+                emoji = fish_emojis.get(fish, "🐟")
                 lines.append(f"- {emoji} {disp}")
                 buttons.append({"label": button_label(fish), "action": "message", "messageText": disp})
 
@@ -352,7 +364,7 @@ def fishbot():
                 }
             })
 
-        # \uac1c\ubcc4 \uc5b4\uc885 \uc9c8\ubb38 \ucc98\ub9ac
+        # 개별 어종 질문 처리
         found_fish = normalize_fish_name(user_input)
         logger.info(f"Normalized fish: {found_fish}")
 
@@ -364,34 +376,34 @@ def fishbot():
                     "template": {"outputs": [{"simpleText": {"text": info}}]}
                 })
             except Exception as e:
-                logger.exception(f"{found_fish} \ucc98\ub9ac \uc624\ub958: {e}")
+                logger.exception(f"{found_fish} 처리 오류: {e}")
                 return jsonify({
                     "version": "2.0",
                     "template": {
-                        "outputs": [{"simpleText": {"text": f"\u26a0\ufe0f '{found_fish}' \uc815\ubcf4\ub97c \ucc98\ub9ac\ud558\ub294 \uc911 \uc624\ub958\uac00 \ubc1c\uc0dd\ud588\uc2b5\ub2c8\ub2e4."}}]
+                        "outputs": [{"simpleText": {"text": f"⚠️ '{found_fish}' 정보를 처리하는 중 오류가 발생했습니다."}}]
                     }
                 })
 
-        # \uc5b4\uc885 \uc778\uc2dd \uc2e4\ud328
-        cleaned = re.sub(r"(\uae08\uc5b4\uae30|\uae08\uc9c0\uccb4\uc7a5|\uc54c\ub824\uc8fc\uc138\uc694|\uc54c\ub824|\uc8fc\uc138\uc694|\uc815\ubcf4|\uc5b4\uc885|\uc870\ub9ac|\uc880|)", "", user_input).strip()
+        # 어종 인식 실패
+        cleaned = re.sub(r"(금어기|금지체장|알려줘|알려|주세요|정보|어종|좀|)", "", user_input).strip()
         display_name = cleaned if cleaned else user_input
         return jsonify({
             "version": "2.0",
             "template": {
                 "outputs": [{
                     "simpleText": {
-                        "text": f"\ud83e\udd14 '{display_name}'\uc758 \uae08\uc5b4\uae30 \ubc0f \uae08\uc9c0\uccb4\uc7a5 \uc815\ubcf4\uac00 \uc5c6\uc2b5\ub2c8\ub2e4.\n\uc5b4\uc885 \uc815\ubcf4\ub97c \ub2e4\uc2dc \ud655\uc778\ud574 \uc8fc\uc138\uc694."
+                        "text": f"🤔 '{display_name}'의 금어기 및 금지체장 정보가 없습니다.\n어종 정보를 다시 확인해 주세요."
                     }
                 }]
             }
         })
 
     except Exception as e:
-        logger.exception(f"fishbot \uc804\uccb4 \uc624\ub958: {e}")
+        logger.exception(f"fishbot 전체 오류: {e}")
         return jsonify({
             "version": "2.0",
             "template": {
-                "outputs": [{"simpleText": {"text": "\u26a0\ufe0f \uc54c \uc218 \uc5c6\ub294 \uc624\ub958\uac00 \ubc1c\uc0dd\ud588\uc2b5\ub2c8\ub2e4. \uc7a0\uc2dc \ud6c4 \ub2e4\uc2dc \uc2dc\ub3c4\ud574 \uc8fc\uc138\uc694."}}]
+                "outputs": [{"simpleText": {"text": "⚠️ 알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."}}]
             }
         })
 
