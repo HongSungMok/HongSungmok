@@ -355,6 +355,7 @@ if fish_norm and fish_norm in fish_data:
     text = format_fish_info(fish_norm, fish_data[fish_norm])
     return jsonify(build_response(text))
 
+try:
         # 어종명 인식 및 상세정보 조회
         fish_norm = normalize_fish_name(user_text)
         if fish_norm and fish_norm in fish_data:
