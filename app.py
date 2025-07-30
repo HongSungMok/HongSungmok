@@ -160,8 +160,11 @@ def normalize_fish_name(text):
     for name in sorted(all_names, key=lambda x: -len(x)):
         name_key = re.sub(r"\(.*?\)", "", name.lower())
         name_key = re.sub(r"[^\uAC00-\uD7A3a-z0-9\s]", "", name_key)
-        if name_key and name_key in text:
+        pattern = rf"\b{name_key}\b"
+        if re.search(pattern, text):
+            print(f"Matched: {name_key} in {text}")
             return fish_aliases.get(name, name)
+    print(f"No match found in: {text}")
     return None
 
 def get_display_name(fish_name):
