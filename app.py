@@ -210,23 +210,22 @@ def normalize_fish_name(text):
 def get_display_name(fish_name):
     return display_name_map.get(fish_name, re.sub(r"\(.*?\)", "", fish_name))
 
-def format_fish_info(fish_name, info):
+def format_fish_info(fish_name, data):
     emoji = fish_emojis.get(fish_name, "🐟")
-    display_name = get_display_name(fish_name)
+    display = get_display_name(fish_name)
+    period = data.get("금어기", "없음")
+    size = data.get("금지체장", "없음")
+    exception = data.get("예외사항", "없음")
+    ratio = data.get("포획비율제한", "없음")
 
-    closed_period = info.get("금어기", "없음")
-    closed_size = info.get("금지체장", "없음")
-    exception = info.get("예외사항", "없음")
-    limit_ratio = info.get("포획비율제한", "없음")
-
-    message = (
-        f"{emoji} {display_name} {emoji}\n\n"
-        f"🚫 금어기\n전국: {closed_period}\n\n"
-        f"📏 금지체장\n전국: {closed_size}\n\n"
+    text = (
+        f"{emoji} {display} {emoji}\n\n"
+        f"🚫 금어기\n전국: {period}\n\n"
+        f"📏 금지체장\n전국: {size}\n\n"
         f"⚠️ 예외사항: {exception}\n"
-        f"⚠️ 포획비율제한: {limit_ratio}"
+        f"⚠️ 포획비율제한: {ratio}\n"
     )
-    return message
+    return text
 
 def is_date_in_period(period, date):
     try:
@@ -350,14 +349,19 @@ def fishbot():
 
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
+# 어종명 인식 및 상세정보 조회
+fish_norm = normalize_fish_name(user_text)
+if fish_norm and fish_norm in fish_data:
+    text = format_fish_info(fish_norm, fish_data[fish_norm])
+    return jsonify(build_response(text))
+
         # 어종명 인식 및 상세정보 조회
         fish_norm = normalize_fish_name(user_text)
         if fish_norm and fish_norm in fish_data:
             text = format_fish_info(fish_norm, fish_data[fish_norm])
-            buttons = [{"label": "오늘 금어기", "action": "message", "messageText": "오늘 금어기"}]
-            return jsonify(build_response(text, buttons=buttons))
+            return jsonify(build_response(text))
 
-        # 어종 미존재 또는 인식 실패 시 기본 메시지
+        # 어종 인식 실패 또는 데이터 없을 때만 버튼과 안내문
         disp_name = get_display_name(fish_norm) if fish_norm else user_text
         body = (
             f"🐟 {disp_name} 🐟\n\n"
@@ -369,7 +373,7 @@ def fishbot():
         )
         buttons = [
             {
-                "label": "오늘 금어기",
+                "label": "오늘의 금어기",
                 "action": "message",
                 "messageText": "오늘 금어기"
             }
