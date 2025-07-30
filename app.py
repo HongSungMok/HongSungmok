@@ -190,21 +190,34 @@ context = """
 """
 
 def normalize_fish_name(text):
-    """
-    사용자 입력 텍스트에서 어종명 추출 후, 대표 표준명으로 반환하는 함수.
-    - 소문자 변환 및 괄호, 특수문자 제거 후 fish_aliases 기준으로 매칭 시도.
-    - 가장 긴 이름부터 매칭하여 부분 문자열 오류 최소화.
-    """
+    # 모두 소문자 변환
     text = text.lower()
-    text = re.sub(r"\(.*?\)", "", text)  # 괄호 제거
-    text = re.sub(r"[^\uAC00-\uD7A3a-z0-9]", "", text)  # 한글, 영문, 숫자 제외 모두 제거
+    # 괄호 제거
+    text = re.sub(r"\(.*?\)", "", text)
+    # 한글, 영문, 숫자 외 문자 모두 공백으로 변경 (조사 분리 위해)
+    text = re.sub(r"[^\uAC00-\uD7A3a-z0-9]", " ", text)
+    # 여러 공백 하나로 축소
+    text = re.sub(r"\s+", " ", text).strip()
+
+    # 텍스트를 단어 리스트로 분리
+    words = text.split()
 
     all_names = set(fish_data.keys()) | set(fish_aliases.keys())
-    for name in sorted(all_names, key=lambda x: -len(x)):  # 긴 이름부터 검사
+
+    for name in sorted(all_names, key=lambda x: -len(x)):
+        # 이름도 소문자, 괄호, 특수문자 제거 후 단어로 변환
         name_key = re.sub(r"\(.*?\)", "", name.lower())
-        name_key = re.sub(r"[^\uAC00-\uD7A3a-z0-9]", "", name_key)
-        if name_key in text:
-            return fish_aliases.get(name, name)
+        name_key = re.sub(r"[^\uAC00-\uD7A3a-z0-9]", " ", name_key)
+        name_key = re.sub(r"\s+", " ", name_key).strip()
+
+        # 이름을 단어 리스트로 분리
+        name_words = name_key.split()
+
+        # text 내에 name_words가 연속으로 존재하는지 확인
+        for i in range(len(words) - len(name_words) + 1):
+            if words[i:i+len(name_words)] == name_words:
+                return fish_aliases.get(name, name)
+
     return None
 
 def is_date_in_period(period, date):
