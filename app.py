@@ -368,43 +368,39 @@ def fishbot():
         found_fish = normalize_fish_name(user_input)
         logger.info(f"Normalized fish: {found_fish}")
 
-        if found_fish:
-            try:
-                info = get_fish_info(found_fish, fish_data)
-                return jsonify({
-                    "version": "2.0",
-                    "template": {"outputs": [{"simpleText": {"text": info}}]}
-                })
-            except Exception as e:
-                logger.exception(f"{found_fish} 처리 오류: {e}")
-                return jsonify({
-                    "version": "2.0",
-                    "template": {
-                        "outputs": [{"simpleText": {"text": f"⚠️ '{found_fish}' 정보를 처리하는 중 오류가 발생했습니다."}}]
-                    }
-                })
+        if found_fish and found_fish in fish_data:
+            response_text, buttons = get_fish_info(found_fish, fish_data)
+        else:
+            display_name = display_name_map.get(found_fish, found_fish) if found_fish else user_input
+            response_text = (
+                f"🐟 {display_name} 🐟\n\n"
+                f"🚫 금어기\n전국: 없음\n\n"
+                f"📏 금지체장\n전국: 없음\n\n"
+                f"⚠️ 예외사항: 없음\n"
+                f"⚠️ 포획비율제한: 없음\n\n"
+                f"✨ 오늘 금어기를 알려드릴까요?"
+            )
+            buttons = [
+                {
+                    "label": "오늘 금어기",
+                    "action": "message",
+                    "messageText": "오늘 금어기 알려줘"
+                }
+            ]
 
-        # 어종 인식 실패
-        cleaned = re.sub(r"(금어기|금지체장|알려줘|알려|주세요|정보|어종|좀|)", "", user_input).strip()
-        display_name = cleaned if cleaned else user_input
         return jsonify({
             "version": "2.0",
             "template": {
-                "outputs": [{
-                    "simpleText": {
-                        "text": f"🤔 '{display_name}'의 금어기 및 금지체장 정보가 없습니다.\n어종 정보를 다시 확인해 주세요."
-                    }
-                }]
+                "outputs": [{"simpleText": {"text": response_text}}],
+                "quickReplies": buttons
             }
         })
 
     except Exception as e:
-        logger.exception(f"fishbot 전체 오류: {e}")
+        logger.error(f"Error in /TAC: {e}", exc_info=True)
         return jsonify({
             "version": "2.0",
-            "template": {
-                "outputs": [{"simpleText": {"text": "⚠️ 알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."}}]
-            }
+            "template": {"outputs": [{"simpleText": {"text": "오류가 발생했습니다. 잠시 후 다시 시도해 주세요."}}]}
         })
 
 if __name__ == "__main__":

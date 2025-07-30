@@ -43,15 +43,9 @@ def convert_period_format(period):
 
 def get_fish_info(fish_name, fish_data):
     fish = fish_data.get(fish_name)
-    if not fish:
-        return (
-            f"🚫 금어기\n전국: 없음\n\n"
-            f"📏 금지체장\n전국: 없음\n\n"
-            f"⚠️ 예외사항: 없음\n"
-            f"⚠️ 포획비율제한: 없음"
-        )
+    display_name = fish_name  # 변환된 대표명 또는 입력 그대로 출력
 
-    # 이모지
+    # 이모지 지정
     emoji = "🐟"
     if "전복" in fish_name or "소라" in fish_name:
         emoji = "🐚"
@@ -64,6 +58,24 @@ def get_fish_info(fish_name, fish_data):
     elif "미역" in fish_name or "우뭇가사리" in fish_name or "톳" in fish_name:
         emoji = "🌿"
 
+    res = f"{emoji} {display_name} {emoji}\n\n"
+
+    if not fish:
+        res += (
+            "🚫 금어기\n전국: 없음\n\n"
+            "📏 금지체장\n전국: 없음\n\n"
+            "⚠️ 예외사항: 없음\n"
+            "⚠️ 포획비율제한: 없음\n\n"
+            "✨ 오늘의 금어기를 알려드릴까요?"
+        )
+        return res, [
+            {
+                "label": "오늘의 금어기",
+                "action": "message",
+                "messageText": "오늘 금어기"
+            }
+        ]
+
     # 금어기
     금어기_전국 = fish.get("금어기")
     금어기_지역별 = [
@@ -72,7 +84,7 @@ def get_fish_info(fish_name, fish_data):
         if k.endswith("_금어기") and k != "금어기"
     ]
 
-    # 금지체장/체중
+    # 금지체장 또는 체중
     금지기준_전국 = fish.get("금지체장") or fish.get("금지체중")
     기준_이름 = "📏 금지체장" if "금지체장" in fish else ("⚖️ 금지체중" if "금지체중" in fish else "📏 금지체장")
     금지기준_지역별 = [
@@ -81,18 +93,16 @@ def get_fish_info(fish_name, fish_data):
         if k.endswith("_금지체장") or k.endswith("_금지체중")
     ]
 
-    예외사항 = fish.get("금어기_예외", fish.get("예외사항", "없음"))
+    예외사항 = fish.get("금어기_예외") or fish.get("예외사항") or "없음"
     포획비율 = fish.get("포획비율제한", "없음")
 
-    res = f"{emoji} {fish_name} {emoji}\n\n"
-
-    # 금어기
+    # 🚫 금어기
     res += f"🚫 금어기\n전국: {convert_period_format(금어기_전국) if 금어기_전국 else '없음'}\n"
     for region, period in 금어기_지역별:
         res += f"{region}: {convert_period_format(period)}\n"
     res += "\n"
 
-    # 금지체장/체중
+    # 📏 금지체장 or ⚖️ 금지체중
     res += f"{기준_이름}\n전국: {금지기준_전국 if 금지기준_전국 else '없음'}\n"
     for region, value in 금지기준_지역별:
         res += f"{region}: {value}\n"
@@ -101,7 +111,7 @@ def get_fish_info(fish_name, fish_data):
     res += f"⚠️ 예외사항: {예외사항}\n"
     res += f"⚠️ 포획비율제한: {포획비율}"
 
-    return res
+    return res, []
 
 
 def get_fishes_in_seasonal_ban(fish_data, target_date=None):
