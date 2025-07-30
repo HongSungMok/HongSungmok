@@ -226,18 +226,25 @@ def is_date_in_period(period, date):
     날짜가 기간 내에 포함되면 True 반환, 아니면 False.
     """
     try:
+        if "~" not in period:
+            return False  # 기간 형식이 아니면 False 처리
+
         start_str, end_str = period.split("~")
-        sm, sd = map(int, start_str.strip().split("."))
-        if "익년" in end_str:
-            end_str = end_str.replace("익년", "").strip()
-            em, ed = map(int, end_str.split("."))
-            ey = date.year + 1
-        else:
-            em, ed = map(int, end_str.strip().split("."))
-            ey = date.year
+        sm_sd = start_str.strip().split(".")
+        em_ed = end_str.replace("익년", "").strip().split(".")
+
+        # 숫자가 아닌 부분 체크
+        if len(sm_sd) != 2 or len(em_ed) != 2:
+            return False
+
+        sm, sd = int(sm_sd[0]), int(sm_sd[1])
+        em, ed = int(em_ed[0]), int(em_ed[1])
+
+        ey = date.year + 1 if "익년" in end_str else date.year
 
         start_date = datetime(date.year, sm, sd)
         end_date = datetime(ey, em, ed)
+
         return start_date <= date <= end_date
     except Exception as e:
         logger.error(f"is_date_in_period error: {e}")
