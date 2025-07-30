@@ -189,6 +189,7 @@ context = """
  • 불법 어획물 방류명령 불이행, 허위 보고, 지정 외 거래 등
 """
 
+# 🔧 어종 이름 정규화
 def normalize_fish_name(text):
     text = text.lower()
     text = re.sub(r"\(.*?\)", "", text)
@@ -199,11 +200,10 @@ def normalize_fish_name(text):
         name_key = re.sub(r"\(.*?\)", "", name.lower())
         name_key = re.sub(r"[^\uAC00-\uD7A3a-zA-Z0-9]", "", name_key)
         if name_key in text:
-            canonical = fish_aliases.get(name, name)
-            if canonical in fish_data:
-                return canonical
+            return fish_aliases.get(name, name)
     return None
 
+# 🔧 날짜 포함 여부
 def is_date_in_range(period, today):
     try:
         start_str, end_str = period.split("~")
@@ -267,6 +267,35 @@ def check_today_in_all_closed_periods(data, today):
                         return True
     return False
 
+def get_fish_info(fish_name, data_source):
+    data = data_source.get(fish_name, {})
+    emoji = fish_emojis.get(fish_name, "🐟")
+    display = display_name_map.get(fish_name, fish_name)
+    period = data.get("금어기", "없음")
+    size = data.get("금지체장", "없음")
+    extra1 = data.get("예외사항", "없음")
+    extra2 = data.get("포획비율제한", "없음")
+
+    text = f"""🐟 {display} 🐟
+
+🚫 금어기
+전국: {period}
+
+📏 금지체장
+전국: {size}
+
+⚠️ 예외사항: {extra1}
+⚠️ 포획비율제한: {extra2}
+
+✨ 오늘 금어기를 알려드릴까요?"""
+    buttons = [{
+        "label": "오늘 금어기",
+        "action": "message",
+        "messageText": "오늘 금어기 알려줘"
+    }]
+    return text, buttons
+
+# ✅ 메인 API
 @app.route("/TAC", methods=["POST"])
 def fishbot():
     try:
@@ -276,8 +305,8 @@ def fishbot():
 
         today = datetime.today()
 
-        # 오늘 금어기 어종 요청 처리
-        if re.search(r"(오늘|지금).*(금어기)", user_input):
+        # 오늘 금어기
+        if re.search(r"(오늘|지금|현재|금일|투데이).*(금어기)", user_input):
             today_closed = set()
             for name, data in fish_data.items():
                 if check_today_in_all_closed_periods(data, today):
@@ -316,7 +345,7 @@ def fishbot():
                 }
             })
 
-        # 월 금어기 질문 처리
+        # 월별 금어기
         if MONTH_CLOSED_KEYWORD in user_input:
             match = re.search(r"(\d{1,2})월", user_input)
             if not match:
@@ -364,7 +393,7 @@ def fishbot():
                 }
             })
 
-        # 개별 어종 질문 처리
+        # 개별 어종
         found_fish = normalize_fish_name(user_input)
         logger.info(f"Normalized fish: {found_fish}")
 
@@ -380,13 +409,11 @@ def fishbot():
                 f"⚠️ 포획비율제한: 없음\n\n"
                 f"✨ 오늘 금어기를 알려드릴까요?"
             )
-            buttons = [
-                {
-                    "label": "오늘 금어기",
-                    "action": "message",
-                    "messageText": "오늘 금어기 알려줘"
-                }
-            ]
+            buttons = [{
+                "label": "오늘 금어기",
+                "action": "message",
+                "messageText": "오늘 금어기 알려줘"
+            }]
 
         return jsonify({
             "version": "2.0",
