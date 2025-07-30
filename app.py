@@ -191,15 +191,20 @@ context = """
 
 def normalize_fish_name(text):
     text = text.lower()
+    print(f"원본 텍스트: {text}")  # 디버그용 출력
     text = re.sub(r"\(.*?\)", "", text)
-    text = re.sub(r"[^\uAC00-\uD7A3a-z0-9]", "", text)
+    print(f"괄호 제거 후: {text}")
+    text = re.sub(r"[^\uAC00-\uD7A3a-z0-9\s]", "", text)  # 띄어쓰기 유지
+    print(f"특수문자 제거 후(띄어쓰기 유지): {text}")
 
     all_names = set(fish_data.keys()) | set(fish_aliases.keys())
     for name in sorted(all_names, key=lambda x: -len(x)):
         name_key = re.sub(r"\(.*?\)", "", name.lower())
-        name_key = re.sub(r"[^\uAC00-\uD7A3a-z0-9]", "", name_key)
+        name_key = re.sub(r"[^\uAC00-\uD7A3a-z0-9\s]", "", name_key)  # 띄어쓰기 유지
         if name_key and name_key in text:
+            print(f"매칭된 이름: {name} -> {fish_aliases.get(name, name)}")
             return fish_aliases.get(name, name)
+    print("매칭 실패")
     return None
 
 def get_display_name(fish_name):
