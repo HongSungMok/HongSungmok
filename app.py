@@ -159,7 +159,8 @@ def normalize_fish_name(text):
     text = text.strip()
     all_names = list(fish_aliases.keys())
     for name in sorted(all_names, key=lambda x: -len(x)):
-        if name in text:
+        pattern = r'\b' + re.escape(name) + r'\b'
+        if re.search(pattern, text):
             return fish_aliases.get(name, name)
     return None
 
@@ -223,7 +224,7 @@ def build_response(text, buttons=None):
         response["template"]["quickReplies"] = buttons
     return response
 
-@app.route("/TAC", methods=["POST"])
+app.route("/TAC", methods=["POST"])
 def fishbot():
     try:
         req = request.get_json()
@@ -231,7 +232,7 @@ def fishbot():
         today = datetime.today()
         logger.info(f"사용자 입력: {user_text}")
 
-        # 오늘 금어기
+        # 오늘 금어기 조회
         if re.search(r"(오늘|지금|현재|금일|투데이).*(금어기)", user_text):
             fishes = get_fishes_in_today_ban(fish_data, today)
             if not fishes:
@@ -248,7 +249,7 @@ def fishbot():
                 buttons.append({"label": disp, "action": "message", "messageText": disp})
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
-        # 월 금어기
+        # 월별 금어기 조회
         m = re.search(r"(\d{1,2})월.*금어기", user_text)
         if m:
             month = int(m.group(1))
