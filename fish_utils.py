@@ -5,6 +5,7 @@ from fish_data import fish_data
 
 logger = logging.getLogger(__name__)
 
+# 어종명 정규화 매핑
 fish_name_aliases = {
     "문치가자미": "문치가자미",
     "감성돔": "감성돔",
@@ -48,82 +49,44 @@ fish_name_aliases = {
     "오징어": "살오징어(오징어)",
     "낙지": "낙지",
     "주꾸미": "주꾸미",
-    "쭈구미": "주꾸미",  
     "쭈꾸미": "주꾸미",
+    "쭈구미": "주꾸미",
     "참문어": "참문어",
     "해삼": "해삼",
 }
 
-
-
-def clean_input(text: str) -> str:
-    noise_keywords = ["금어기", "금지체장", "체장", "포획", "크기", "사이즈", "알려줘", "정보", "좀", "?", "요"]
-    text = text.lower()
-    for kw in noise_keywords:
-        text = text.replace(kw, "")
-    return text.strip()
-
 def normalize_fish_name(user_input: str) -> str:
-    cleaned = clean_input(user_input)
+    cleaned = re.sub(r"[^\uAC00-\uD7A3a-zA-Z0-9]", "", user_input.lower())
     for alias in sorted(fish_name_aliases.keys(), key=len, reverse=True):
         if alias in cleaned:
             return fish_name_aliases[alias]
-    return cleaned
+    return user_input.strip()
 
 def convert_period_format(period: str) -> str:
-    """
-    '6.1~8.31' -> '6월1일 ~ 8월31일' 등으로 변환
-    """
     try:
-        if not period:
+        if not period or "~" not in period:
             return "없음"
-        if isinstance(period, str):
-            if "고시" in period or "없음" in period or "~" not in period:
-                return period
-            start, end = period.split("~", 1)
-            sm, sd = map(int, start.strip().split("."))
-            start_fmt = f"{sm}월{sd}일"
-            end = end.strip()
-            if "익년" in end:
-                end = end.replace("익년", "").strip()
-                m = re.match(r"(\d+)\.(\d+)(.*)", end)
-                if m:
-                    em, ed, extra = m.groups()
-                    end_fmt = f"익년 {int(em)}월{int(ed)}일{extra.strip()}"
-                else:
-                    end_fmt = end
-            else:
-                m = re.match(r"(\d+)\.(\d+)(.*)", end)
-                if m:
-                    em, ed, extra = m.groups()
-                    end_fmt = f"{int(em)}월{int(ed)}일{extra.strip()}"
-                else:
-                    end_fmt = end
-            return f"{start_fmt} ~ {end_fmt}"
-        return str(period)
+        start, end = period.split("~")
+        sm, sd = map(int, start.strip().split("."))
+        start_fmt = f"{sm}월{sd}일"
+        if "익년" in end:
+            end = end.replace("익년", "").strip()
+            em, ed = map(int, end.split("."))
+            end_fmt = f"익년 {em}월{ed}일"
+        else:
+            em, ed = map(int, end.strip().split("."))
+            end_fmt = f"{em}월{ed}일"
+        return f"{start_fmt} ~ {end_fmt}"
     except Exception as e:
-        logger.error(f"[convert_period_format error] {e}")
-        return str(period)
+        logger.warning(f"[convert_period_format] {period} 변환 오류: {e}")
+        return period
 
 def get_fish_info(fish_name: str, fish_data: dict):
     fish = fish_data.get(fish_name)
-    display_name = fish_name
 
-    emoji = "🐟"
-    if "전복" in fish_name or "소라" in fish_name:
-        emoji = "🐚"
-    elif "오징어" in fish_name:
-        emoji = "🦑"
-    elif any(x in fish_name for x in ["주꾸미", "문어", "낙지"]):
-        emoji = "🐙"
-    elif "게" in fish_name:
-        emoji = "🦀"
-    elif any(x in fish_name for x in ["미역", "우뭇가사리", "톳"]):
-        emoji = "🌿"
-
-    header = f"{emoji} {display_name} {emoji}\n\n"
-
+    # 어종 정보 없음
     if not fish:
+        header = f"🐟 {fish_name} 🐟\n\n"
         body = (
             "🚫 금어기\n전국: 없음\n\n"
             "📏 금지체장\n전국: 없음\n\n"
@@ -132,45 +95,49 @@ def get_fish_info(fish_name: str, fish_data: dict):
             "✨ 오늘의 금어기를 알려드릴까요?"
         )
         buttons = [
-            {
-                "label": "오늘의 금어기",
-                "action": "message",
-                "messageText": "오늘 금어기"
-            }
+            {"label": "오늘의 금어기", "action": "message", "messageText": "오늘 금어기"}
         ]
         return header + body, buttons
 
+    # 정상 어종 정보
+    header = f"🐟 {fish_name} 🐟\n\n"
+
     total_ban = convert_period_format(fish.get("금어기"))
     region_bans = [
-        (k.replace("_금어기", "").replace("_", " "), v)
-        for k, v in fish.items() if k.endswith("_금어기") and k != "금어기"
+        (k.replace("_금어기", "").replace("_", " "), convert_period_format(v))
+        for k, v in fish.items()
+        if k.endswith("_금어기") and k != "금어기"
     ]
 
-    total_size = fish.get("금지체장") or fish.get("금지체중")
-    size_type = "📏 금지체장" if "금지체장" in fish else ("⚖️ 금지체중" if "금지체중" in fish else "📏 금지체장")
+    size_label = "📏 금지체장"
+    size_value = fish.get("금지체장") or fish.get("금지체중") or "없음"
+    if "금지체중" in fish:
+        size_label = "⚖️ 금지체중"
+
     region_sizes = [
         (k.replace("_금지체장", "").replace("_금지체중", "").replace("_", " "), v)
-        for k, v in fish.items() if k.endswith("_금지체장") or k.endswith("_금지체중")
+        for k, v in fish.items()
+        if k.endswith("_금지체장") or k.endswith("_금지체중")
     ]
 
     exception = fish.get("금어기_예외") or fish.get("예외사항") or "없음"
     ratio = fish.get("포획비율제한", "없음")
 
     body = f"🚫 금어기\n전국: {total_ban}\n"
-    for region, period in region_bans:
-        body += f"{region}: {convert_period_format(period)}\n"
+    for region, val in region_bans:
+        body += f"{region}: {val}\n"
     body += "\n"
 
-    body += f"{size_type}\n전국: {total_size if total_size else '없음'}\n"
+    body += f"{size_label}\n전국: {size_value}\n"
     for region, val in region_sizes:
         body += f"{region}: {val}\n"
     body += "\n"
 
-    # 추가 필드 안내
-    extra_keys = ["금어기_해역_특이사항", "금어기_특정해역", "금어기_추가", "지역별_금어기", "근해채낚기_연안복합_정치망_금어기", "근해채낚기, 연안복합, 정치망_금어기"]
-    for key in extra_keys:
+    extra_fields = ["금어기_해역_특이사항", "금어기_특정해역", "금어기_추가", "지역별_금어기", "근해채낚기_연안복합_정치망_금어기", "근해채낚기, 연안복합, 정치망_금어기"]
+    for key in extra_fields:
         if key in fish:
             body += f"⚠️ {key.replace('_', ' ')}: {fish[key]}\n"
+
     body += f"\n⚠️ 예외사항: {exception}\n"
     body += f"⚠️ 포획비율제한: {ratio}"
 
@@ -180,28 +147,23 @@ def get_fishes_in_seasonal_ban(fish_data: dict, target_date: datetime = None):
     if target_date is None:
         target_date = datetime.today()
     md = (target_date.month, target_date.day)
-    matched = []
+    result = []
     for name, info in fish_data.items():
         period = info.get("금어기")
-        if not isinstance(period, str) or "~" not in period:
+        if not period or "~" not in period:
             continue
         try:
             start, end = period.split("~")
             sm, sd = map(int, start.strip().split("."))
-            em = ed = None
             if "익년" in end:
                 end = end.replace("익년", "").strip()
                 em, ed = map(int, end.split("."))
                 in_range = md >= (sm, sd) or md <= (em, ed)
             else:
                 em, ed = map(int, end.strip().split("."))
-                if (sm, sd) <= (em, ed):
-                    in_range = (sm, sd) <= md <= (em, ed)
-                else:
-                    in_range = md >= (sm, sd) or md <= (em, ed)
+                in_range = (sm, sd) <= md <= (em, ed) if (sm, sd) <= (em, ed) else md >= (sm, sd) or md <= (em, ed)
             if in_range:
-                # 대표 어종명으로 변환
-                matched.append(fish_name_aliases.get(name, name))
+                result.append(name)
         except Exception as e:
             logger.warning(f"[금어기 파싱 오류] {name}: {period} / {e}")
-    return matched
+    return result
