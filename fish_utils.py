@@ -133,7 +133,11 @@ def get_fish_info(fish_name: str, fish_data: dict):
         body += f"{region}: {val}\n"
     body += "\n"
 
-    extra_fields = ["금어기_해역_특이사항", "금어기_특정해역", "금어기_추가", "지역별_금어기", "근해채낚기_연안복합_정치망_금어기", "근해채낚기, 연안복합, 정치망_금어기"]
+    # 추가 설명 필드
+    extra_fields = [
+        "금어기_해역_특이사항", "금어기_특정해역", "금어기_추가", "지역별_금어기",
+        "근해채낚기_연안복합_정치망_금어기", "근해채낚기, 연안복합, 정치망_금어기"
+    ]
     for key in extra_fields:
         if key in fish:
             body += f"⚠️ {key.replace('_', ' ')}: {fish[key]}\n"
@@ -141,7 +145,9 @@ def get_fish_info(fish_name: str, fish_data: dict):
     body += f"\n⚠️ 예외사항: {exception}\n"
     body += f"⚠️ 포획비율제한: {ratio}"
 
-    return header + body, []
+    # 버튼이 없을 경우에도 빈 리스트 반환
+    buttons = []
+    return header + body, buttons
 
 def get_fishes_in_seasonal_ban(fish_data: dict, target_date: datetime = None):
     if target_date is None:
@@ -161,7 +167,10 @@ def get_fishes_in_seasonal_ban(fish_data: dict, target_date: datetime = None):
                 in_range = md >= (sm, sd) or md <= (em, ed)
             else:
                 em, ed = map(int, end.strip().split("."))
-                in_range = (sm, sd) <= md <= (em, ed) if (sm, sd) <= (em, ed) else md >= (sm, sd) or md <= (em, ed)
+                if (sm, sd) <= (em, ed):
+                    in_range = (sm, sd) <= md <= (em, ed)
+                else:
+                    in_range = md >= (sm, sd) or md <= (em, ed)
             if in_range:
                 result.append(name)
         except Exception as e:
