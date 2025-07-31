@@ -111,10 +111,8 @@ def get_fish_info(fish_name: str, fish_data: dict):
 
     if not fish:
         body = (
-            "🚫 금어기\n"
-            "전국: 없음\n\n"
-            "📏 금지체장\n"
-            "전국: 없음\n\n"
+            "🚫 금어기\n전국: 없음\n\n"
+            "📏 금지체장\n전국: 없음\n\n"
             "⚠️ 예외사항: 없음\n"
             "⚠️ 포획비율제한: 없음"
         )
@@ -134,9 +132,9 @@ def get_fish_info(fish_name: str, fish_data: dict):
         for k, v in fish.items()
         if k.endswith("_금어기") and k != "금어기"
     ]
-    printed_keys = {k for k, _ in region_bans}
+    printed_regions = {label for label, _ in region_bans}
 
-    # 금지체장 또는 금지체중
+    # 금지체장/체중
     total_size = fish.get("금지체장") or fish.get("금지체중")
     size_type = "📏 금지체장" if "금지체장" in fish else ("⚖️ 금지체중" if "금지체중" in fish else "📏 금지체장")
     region_sizes = [
@@ -145,37 +143,44 @@ def get_fish_info(fish_name: str, fish_data: dict):
         if k.endswith("_금지체장") or k.endswith("_금지체중")
     ]
 
-    # 예외사항
     exception = fish.get("금어기_예외") or fish.get("예외사항") or "없음"
     ratio = fish.get("포획비율제한", "없음")
 
     # 본문 조립
-    body = f"🚫 금어기\n전국: {total_ban}\n"
+    lines = []
+    lines.append("🚫 금어기")
+    lines.append(f"전국: {total_ban}")
     for region, period in region_bans:
-        body += f"{region}: {convert_period_format(period)}\n"
-    body += "\n"
+        lines.append(f"{region}: {convert_period_format(period)}")
+    lines.append("")  # 줄바꿈
 
-    body += f"{size_type}\n전국: {total_size if total_size else '없음'}\n"
+    lines.append(size_type)
+    lines.append(f"전국: {total_size if total_size else '없음'}")
     for region, val in region_sizes:
-        body += f"{region}: {val}\n"
-    body += "\n"
+        lines.append(f"{region}: {val}")
+    lines.append("")  # 줄바꿈
 
-    # 기타 필드 중복 없이 출력
+    # 기타 필드 (중복 방지용)
     extra_keys = [
         "금어기_해역_특이사항", "금어기_특정해역", "금어기_추가",
         "지역별_금어기", "근해채낚기_연안복합_정치망_금어기",
         "근해채낚기, 연안복합, 정치망_금어기"
     ]
     for key in extra_keys:
+        val = fish.get(key)
+        if not val:
+            continue
         label = key.replace("_", " ")
-        if key in fish and label not in printed_keys:
-            body += f"⚠️ {label}: {convert_period_format(fish[key])}\n"
-    body += "\n"
+        # 이미 region_bans에서 출력된 항목이면 생략
+        if label in printed_regions:
+            continue
+        lines.append(f"⚠️ {label}: {convert_period_format(val)}")
+    lines.append("")  # 줄바꿈
 
-    body += f"⚠️ 예외사항: {exception}\n"
-    body += f"⚠️ 포획비율제한: {ratio}"
+    lines.append(f"⚠️ 예외사항: {exception}")
+    lines.append(f"⚠️ 포획비율제한: {ratio}")
 
-    return header + body, []
+    return header + "\n".join(lines), []
 
 def get_fishes_in_seasonal_ban(fish_data: dict, target_date: datetime = None):
     if target_date is None:
