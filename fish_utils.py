@@ -48,6 +48,7 @@ fish_name_aliases = {
     "오징어": "살오징어(오징어)",
     "낙지": "낙지",
     "주꾸미": "주꾸미",
+    "쭈구미": "주꾸미",  
     "쭈꾸미": "주꾸미",
     "참문어": "참문어",
     "해삼": "해삼",
@@ -56,23 +57,20 @@ fish_name_aliases = {
 
 
 def clean_input(text: str) -> str:
-    noise_keywords = ["금어기", "금지체장", "체장", "포획", "크기", "사이즈", "알려줘", "정보"]
+    noise_keywords = ["금어기", "금지체장", "체장", "포획", "크기", "사이즈", "알려줘", "정보", "좀", "?", "요"]
+    text = text.lower()
     for kw in noise_keywords:
         text = text.replace(kw, "")
     return text.strip()
 
 def normalize_fish_name(user_input: str) -> str:
-    cleaned = clean_input(user_input).lower()
-    
-    # 특수문자, 괄호, 영어 등 제거
-    cleaned = re.sub(r"\(.*?\)", "", cleaned)
-    cleaned = re.sub(r"[^\uAC00-\uD7A3a-z0-9\s]", "", cleaned)
-
-    # alias 길이 긴 순서대로 우선 매칭 (예: '넙치(광어)' 대응 가능)
-    for alias in sorted(fish_name_aliases.keys(), key=lambda x: -len(x)):
-        if alias in cleaned:
-            return fish_name_aliases[alias]
-    return None
+    cleaned = clean_input(user_input)
+    words = re.findall(r"[가-힣]+", cleaned)  # 한글 단어만 추출
+    for word in words:
+        for alias in sorted(fish_name_aliases.keys(), key=len, reverse=True):
+            if alias == word:
+                return fish_name_aliases[alias]
+    return cleaned
 
 # -------- 금어기 기간 포맷 변환 --------
 def convert_period_format(period: str) -> str:

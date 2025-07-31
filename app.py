@@ -156,6 +156,7 @@ def normalize_fish_name(text):
     text = text.lower()
     text = re.sub(r"\(.*?\)", "", text)
     text = re.sub(r"[^\uAC00-\uD7A3a-z0-9\s]", "", text)
+    text = text.strip()
     all_names = list(fish_aliases.keys())
     for name in sorted(all_names, key=lambda x: -len(x)):
         if name in text:
@@ -168,10 +169,10 @@ def get_display_name(fish_name):
 def format_fish_info(fish_name, data):
     emoji = fish_emojis.get(fish_name, "🐟")
     display = get_display_name(fish_name)
-    period = data.get("금어기", "없음")
-    size = data.get("금지체장", "없음")
-    exception = data.get("예외사항", "없음")
-    ratio = data.get("포획비율제한", "없음")
+    period = data.get("금어기") or "없음"
+    size = data.get("금지체장") or "없음"
+    exception = data.get("예외사항") or "없음"
+    ratio = data.get("포획비율제한") or "없음"
     return (
         f"{emoji} {display} {emoji}\n\n"
         f"🚫 금어기\n전국: {period}\n\n"
