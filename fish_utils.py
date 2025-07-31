@@ -95,6 +95,7 @@ def get_fish_info(fish_name: str, fish_data: dict):
     fish = fish_data.get(fish_name)
     display_name = fish_name
 
+    # 이모지 선택
     emoji = "🐟"
     if "전복" in fish_name or "소라" in fish_name:
         emoji = "🐚"
@@ -109,6 +110,7 @@ def get_fish_info(fish_name: str, fish_data: dict):
 
     header = f"{emoji} {display_name} {emoji}\n\n"
 
+    # fish_data에 없을 경우 기본 메시지
     if not fish:
         body = (
             "🚫 금어기\n전국: 없음\n\n"
@@ -117,53 +119,35 @@ def get_fish_info(fish_name: str, fish_data: dict):
             "⚠️ 포획비율제한: 없음\n\n"
             "✨ 오늘의 금어기를 알려드릴까요?"
         )
-        buttons = [
-            {
-                "label": "오늘의 금어기",
-                "action": "message",
-                "messageText": "오늘 금어기"
-            }
-        ]
+        buttons = [{
+            "label": "오늘의 금어기",
+            "action": "message",
+            "messageText": "오늘 금어기"
+        }]
         return header + body, buttons
 
-    # 👇 이 항목들은 금어기 섹션에 포함될 보조 금어기 키
-    extra_ban_keys = [
-        "금어기_해역_특이사항",
-        "금어기_특정해역",
-        "금어기_추가",
-        "지역별_금어기",
-        "근해채낚기_연안복합_정치망_금어기",
-        "근해채낚기, 연안복합, 정치망_금어기"
-    ]
-
-    # 🚫 금어기
+    # 🚫 금어기 섹션
     body = "🚫 금어기\n"
-    body += f"전국: {convert_period_format(fish.get('금어기'))}\n"
+    main_ban = convert_period_format(fish.get("금어기"))
+    body += f"전국: {main_ban}\n"
 
-    # 지역별 금어기 (ex. 제주_금어기)
+    # 기타 금어기: 보조/지역별
     for k, v in fish.items():
-        if k.endswith("_금어기") and k != "금어기" and k not in extra_ban_keys:
-            region = k.replace("_금어기", "").replace("_", " ")
-            body += f"{region}: {convert_period_format(v)}\n"
-
-    # 보조 금어기 항목도 함께 출력
-    for key in extra_ban_keys:
-        if key in fish:
-            label = key.replace("_금어기", "").replace("_", " ")
-            body += f"{label}: {convert_period_format(fish[key])}\n"
-
+        if k.endswith("_금어기") and k != "금어기":
+            label = k.replace("_금어기", "").replace("_", " ")
+            formatted = convert_period_format(v)
+            body += f"{label}: {formatted}\n"
     body += "\n"
 
     # 📏 금지체장 or 체중
     size_type = "📏 금지체장" if "금지체장" in fish else ("⚖️ 금지체중" if "금지체중" in fish else "📏 금지체장")
-    total_size = fish.get("금지체장") or fish.get("금지체중")
-    body += f"{size_type}\n전국: {total_size if total_size else '없음'}\n"
+    total_size = fish.get("금지체장") or fish.get("금지체중") or "없음"
+    body += f"{size_type}\n전국: {total_size}\n"
 
     for k, v in fish.items():
         if k.endswith("_금지체장") or k.endswith("_금지체중"):
             region = k.replace("_금지체장", "").replace("_금지체중", "").replace("_", " ")
             body += f"{region}: {v}\n"
-
     body += "\n"
 
     # ⚠️ 예외사항 및 포획비율제한
