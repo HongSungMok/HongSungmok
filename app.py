@@ -152,6 +152,7 @@ context = """
  • 불법 어획물 방류명령 불이행, 허위 보고, 지정 외 거래 등
 """
 
+# 어종명 정규화
 def normalize_fish_name(text):
     text = text.lower()
     text = re.sub(r"\(.*?\)", "", text)
@@ -162,6 +163,7 @@ def normalize_fish_name(text):
             return fish_aliases.get(name, name)
     return None
 
+# 금어기 날짜 포함 여부 확인
 def is_date_in_period(period, date):
     try:
         if not period or "~" not in period or "." not in period:
@@ -183,9 +185,11 @@ def is_date_in_period(period, date):
         logger.error(f"is_date_in_period error: {e}")
         return False
 
+# 오늘 금어기 어종 리스트
 def get_fishes_in_today_ban(fish_data, today):
     return [name for name, data in fish_data.items() if is_date_in_period(data.get("금어기"), today)]
 
+# 어종 카테고리 분류
 def group_by_category(fish_list):
     grouped = {"어류": [], "두족류": [], "폐류": [], "갑각류": [], "기타": []}
     for f in fish_list:
@@ -193,6 +197,7 @@ def group_by_category(fish_list):
         grouped[category].append(f)
     return grouped
 
+# 카카오 응답 생성
 def build_response(text, buttons=None):
     response = {
         "version": "2.0",
@@ -204,6 +209,7 @@ def build_response(text, buttons=None):
         response["template"]["quickReplies"] = buttons
     return response
 
+# 챗봇 엔드포인트
 @app.route("/TAC", methods=["POST"])
 def fishbot():
     try:
@@ -212,7 +218,7 @@ def fishbot():
         today = datetime.today()
         logger.info(f"사용자 입력: {user_text}")
 
-        # 오늘 금어기
+        # 오늘 금어기 조회
         if re.search(r"(오늘|지금|현재|금일|투데이).*(금어기)", user_text):
             fishes = get_fishes_in_today_ban(fish_data, today)
             if not fishes:
@@ -229,7 +235,7 @@ def fishbot():
                 buttons.append({"label": disp, "action": "message", "messageText": disp})
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
-        # 월별 금어기
+        # 월별 금어기 조회
         m = re.search(r"(\d{1,2})월.*금어기", user_text)
         if m:
             month = int(m.group(1))
@@ -264,7 +270,7 @@ def fishbot():
                 buttons.append({"label": disp, "action": "message", "messageText": disp})
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
-        # 특정 어종 정보
+        # 특정 어종 조회
         fish_norm = normalize_fish_name(user_text)
         if fish_norm and fish_norm in fish_data:
             text = format_fish_info(fish_norm, fish_data[fish_norm])
