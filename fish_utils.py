@@ -55,12 +55,22 @@ fish_name_aliases = {
     "해삼": "해삼",
 }
 
+def clean_input(text: str) -> str:
+    noise_keywords = [
+        "금어기", "금지체장", "금지체중", "체장", "체중", "크기", "사이즈",
+        "정보", "알려줘", "좀", "요", "?", ".", " "
+    ]
+    text = text.lower()
+    for kw in noise_keywords:
+        text = text.replace(kw, "")
+    return text.strip()
+
 def normalize_fish_name(user_input: str) -> str:
-    cleaned = re.sub(r"[^\uAC00-\uD7A3a-zA-Z0-9]", "", user_input.lower())
+    cleaned = clean_input(user_input)
     for alias in sorted(fish_name_aliases.keys(), key=len, reverse=True):
         if alias in cleaned:
             return fish_name_aliases[alias]
-    return user_input.strip()
+    return cleaned
 
 def convert_period_format(period: str) -> str:
     try:
@@ -84,9 +94,12 @@ def convert_period_format(period: str) -> str:
 def get_fish_info(fish_name: str, fish_data: dict):
     fish = fish_data.get(fish_name)
 
+    # 이모지용 정제 표시 이름만 추출
+    display_name = re.sub(r"[^\uAC00-\uD7A3a-zA-Z0-9]", "", fish_name)
+
     # 어종 정보 없음
     if not fish:
-        header = f"🐟 {fish_name} 🐟\n\n"
+        header = f"🐟 {display_name} 🐟\n\n"
         body = (
             "🚫 금어기\n전국: 없음\n\n"
             "📏 금지체장\n전국: 없음\n\n"
@@ -99,8 +112,7 @@ def get_fish_info(fish_name: str, fish_data: dict):
         ]
         return header + body, buttons
 
-    # 정상 어종 정보
-    header = f"🐟 {fish_name} 🐟\n\n"
+    header = f"🐟 {display_name} 🐟\n\n"
 
     total_ban = convert_period_format(fish.get("금어기"))
     region_bans = [
@@ -133,10 +145,10 @@ def get_fish_info(fish_name: str, fish_data: dict):
         body += f"{region}: {val}\n"
     body += "\n"
 
-    # 추가 설명 필드
     extra_fields = [
-        "금어기_해역_특이사항", "금어기_특정해역", "금어기_추가", "지역별_금어기",
-        "근해채낚기_연안복합_정치망_금어기", "근해채낚기, 연안복합, 정치망_금어기"
+        "금어기_해역_특이사항", "금어기_특정해역", "금어기_추가",
+        "지역별_금어기", "근해채낚기_연안복합_정치망_금어기",
+        "근해채낚기, 연안복합, 정치망_금어기"
     ]
     for key in extra_fields:
         if key in fish:
@@ -145,9 +157,7 @@ def get_fish_info(fish_name: str, fish_data: dict):
     body += f"\n⚠️ 예외사항: {exception}\n"
     body += f"⚠️ 포획비율제한: {ratio}"
 
-    # 버튼이 없을 경우에도 빈 리스트 반환
-    buttons = []
-    return header + body, buttons
+    return header + body, []
 
 def get_fishes_in_seasonal_ban(fish_data: dict, target_date: datetime = None):
     if target_date is None:
