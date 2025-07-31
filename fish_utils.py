@@ -65,14 +65,11 @@ def clean_input(text: str) -> str:
 
 def normalize_fish_name(user_input: str) -> str:
     cleaned = clean_input(user_input)
-    words = re.findall(r"[가-힣]+", cleaned)  # 한글 단어만 추출
-    for word in words:
-        for alias in sorted(fish_name_aliases.keys(), key=len, reverse=True):
-            if alias == word:
-                return fish_name_aliases[alias]
+    for alias in sorted(fish_name_aliases.keys(), key=len, reverse=True):
+        if alias in cleaned:
+            return fish_name_aliases[alias]
     return cleaned
 
-# -------- 금어기 기간 포맷 변환 --------
 def convert_period_format(period: str) -> str:
     """
     '6.1~8.31' -> '6월1일 ~ 8월31일' 등으로 변환
@@ -108,12 +105,10 @@ def convert_period_format(period: str) -> str:
         logger.error(f"[convert_period_format error] {e}")
         return str(period)
 
-# -------- 어종 정보 출력 함수 --------
 def get_fish_info(fish_name: str, fish_data: dict):
     fish = fish_data.get(fish_name)
     display_name = fish_name
 
-    # 🐟 기본 이모지 분기
     emoji = "🐟"
     if "전복" in fish_name or "소라" in fish_name:
         emoji = "🐚"
@@ -129,7 +124,6 @@ def get_fish_info(fish_name: str, fish_data: dict):
     header = f"{emoji} {display_name} {emoji}\n\n"
 
     if not fish:
-        # 데이터 없을 때 고정 형식 + 버튼
         body = (
             "🚫 금어기\n전국: 없음\n\n"
             "📏 금지체장\n전국: 없음\n\n"
@@ -146,18 +140,16 @@ def get_fish_info(fish_name: str, fish_data: dict):
         ]
         return header + body, buttons
 
-    # 금어기 처리
     total_ban = convert_period_format(fish.get("금어기"))
     region_bans = [
-        (k.replace("_금어기", ""), v)
+        (k.replace("_금어기", "").replace("_", " "), v)
         for k, v in fish.items() if k.endswith("_금어기") and k != "금어기"
     ]
 
-    # 금지체장/체중 처리
     total_size = fish.get("금지체장") or fish.get("금지체중")
     size_type = "📏 금지체장" if "금지체장" in fish else ("⚖️ 금지체중" if "금지체중" in fish else "📏 금지체장")
     region_sizes = [
-        (k.replace("_금지체장", "").replace("_금지체중", ""), v)
+        (k.replace("_금지체장", "").replace("_금지체중", "").replace("_", " "), v)
         for k, v in fish.items() if k.endswith("_금지체장") or k.endswith("_금지체중")
     ]
 
@@ -174,12 +166,16 @@ def get_fish_info(fish_name: str, fish_data: dict):
         body += f"{region}: {val}\n"
     body += "\n"
 
-    body += f"⚠️ 예외사항: {exception}\n"
+    # 추가 필드 안내
+    extra_keys = ["금어기_해역_특이사항", "금어기_특정해역", "금어기_추가", "지역별_금어기", "근해채낚기_연안복합_정치망_금어기", "근해채낚기, 연안복합, 정치망_금어기"]
+    for key in extra_keys:
+        if key in fish:
+            body += f"⚠️ {key.replace('_', ' ')}: {fish[key]}\n"
+    body += f"\n⚠️ 예외사항: {exception}\n"
     body += f"⚠️ 포획비율제한: {ratio}"
 
     return header + body, []
 
-# -------- 특정 날짜 기준 금어기 어종 목록 --------
 def get_fishes_in_seasonal_ban(fish_data: dict, target_date: datetime = None):
     if target_date is None:
         target_date = datetime.today()
@@ -204,7 +200,8 @@ def get_fishes_in_seasonal_ban(fish_data: dict, target_date: datetime = None):
                 else:
                     in_range = md >= (sm, sd) or md <= (em, ed)
             if in_range:
-                matched.append(name)
+                # 대표 어종명으로 변환
+                matched.append(fish_name_aliases.get(name, name))
         except Exception as e:
             logger.warning(f"[금어기 파싱 오류] {name}: {period} / {e}")
     return matched
