@@ -79,9 +79,6 @@ display_name_map = {
     "전복(전복류)": "전복",
 }
 
-def get_display_name(fish_name):
-    return display_name_map.get(fish_name, fish_name)
-
 # 이모지
 fish_emojis = {
     "대게": "🦀", "붉은대게": "🦀", "꽃게": "🦀",
@@ -166,15 +163,6 @@ def normalize_fish_name(text):
             return fish_aliases.get(name, name)
     return None
 
-def format_fish_info(name, info):
-    lines = [f"📘 {get_display_name(name)} 정보:"]
-    for key, value in info.items():
-        if value:
-            if key == "금어기":
-                value = convert_period_format(value)
-            lines.append(f"- {key}: {value}")
-    return "\n".join(lines)
-
 # 금어기 날짜 포함 여부 확인
 def is_date_in_period(period, date):
     try:
@@ -230,27 +218,24 @@ def fishbot():
         today = datetime.today()
         logger.info(f"사용자 입력: {user_text}")
 
-        # 오늘 금어기 어종
+        # 오늘 금어기 조회
         if re.search(r"(오늘|지금|현재|금일|투데이).*(금어기)", user_text):
             fishes = get_fishes_in_today_ban(fish_data, today)
             if not fishes:
                 return jsonify(build_response(f"📅 오늘({today.month}월 {today.day}일) 금어기 어종은 없습니다."))
-
             normalized = [normalize_fish_name(f) or f for f in fishes]
             grouped = group_by_category(normalized)
             ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["갑각류"] + grouped["기타"]
-
             lines = [f"📅 오늘({today.month}월 {today.day}일) 금어기 어종:"]
             buttons = []
-            for f in ordered[:10]:
+            for f in ordered:
                 disp = get_display_name(f)
                 emoji = fish_emojis.get(f, "🐟")
                 lines.append(f"- {emoji} {disp}")
                 buttons.append({"label": disp, "action": "message", "messageText": disp})
-
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
-        # 월별 금어기 어종
+        # 월별 금어기 조회
         m = re.search(r"(\d{1,2})월.*금어기", user_text)
         if m:
             month = int(m.group(1))
@@ -259,42 +244,60 @@ def fishbot():
                 period = data.get("금어기")
                 if not period or "~" not in period:
                     continue
-                sm = int(period.split("~")[0].strip().split(".")[0])
-                em = int(period.split("~")[1].replace("익년", "").strip().split(".")[0])
+                try:
+                    sm = int(period.split("~")[0].strip().split(".")[0])
+                    em = int(period.split("~")[1].replace("익년", "").strip().split(".")[0])
+                except Exception as e:
+                    logger.error(f"월별 금어기 파싱 오류: {e}")
+                    continue
                 if sm <= em:
                     if sm <= month <= em:
                         monthly_fish.append(name)
                 else:
                     if month >= sm or month <= em:
                         monthly_fish.append(name)
-
             if not monthly_fish:
                 return jsonify(build_response(f"📅 {month}월 금어기인 어종이 없습니다."))
-
             normalized = [normalize_fish_name(f) or f for f in monthly_fish]
             grouped = group_by_category(normalized)
             ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["갑각류"] + grouped["기타"]
-
             lines = [f"📅 {month}월 금어기 어종:"]
             buttons = []
-            for f in ordered[:10]:
+            for f in ordered:
                 disp = get_display_name(f)
                 emoji = fish_emojis.get(f, "🐟")
                 lines.append(f"- {emoji} {disp}")
                 buttons.append({"label": disp, "action": "message", "messageText": disp})
-
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
-        # 특정 어종 정보 조회
+        # 특정 어종 조회
         fish_norm = normalize_fish_name(user_text)
         if fish_norm and fish_norm in fish_data:
             text = format_fish_info(fish_norm, fish_data[fish_norm])
             return jsonify(build_response(text))
 
-    except Exception as e:
-        logger.error(f"[전체 오류] fishbot 처리 중 예외: {e}")
-        return jsonify(build_response("⚠️ 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."))
+        # 어종 인식 실패 시 기본 안내
+        disp_name = get_display_name(fish_norm) if fish_norm else user_text
+        body = (
+            f"🐟 {disp_name} 🐟\n\n"
+            "🚫 금어기\n전국: 없음\n\n"
+            "📏 금지체장\n전국: 없음\n\n"
+            "⚠️ 예외사항: 없음\n"
+            "⚠️ 포획비율제한: 없음\n\n"
+            "✨ 오늘의 금어기를 알려드릴까요?"
+        )
+        buttons = [
+            {
+                "label": "오늘의 금어기",
+                "action": "message",
+                "messageText": "오늘 금어기"
+            }
+        ]
+        return jsonify(build_response(body, buttons=buttons))
 
+    except Exception as e:
+        logger.error(f"fishbot error: {e}")
+        return jsonify(build_response("⚠️ 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."))
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
