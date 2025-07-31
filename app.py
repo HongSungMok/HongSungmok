@@ -24,7 +24,7 @@ display_name_map = {
     "제주소라": "제주소라",
 }
 
-# 이모지
+# 이모지 매핑
 fish_emojis = {
     "대게": "🦀", "붉은대게": "🦀", "꽃게": "🦀",
     "오분자기": "🐚", "키조개": "🦪", "제주소라": "🐚",
@@ -44,13 +44,10 @@ def build_response(text, buttons=None):
     response = {
         "version": "2.0",
         "template": {
-            "outputs": [{"simpleText": {"text": text}}]
+            "outputs": [{"simpleText": {"text": text}}],
+            "quickReplies": buttons if buttons else []
         }
     }
-    if buttons is not None and isinstance(buttons, list):
-        response["template"]["quickReplies"] = buttons
-    else:
-        response["template"]["quickReplies"] = []
     return response
 
 @app.route("/TAC", methods=["POST"])
@@ -61,7 +58,7 @@ def fishbot():
         today = datetime.today()
         logger.info(f"[DEBUG] 사용자 입력: {user_text}")
 
-        # 오늘 금어기 어종
+        # 오늘 금어기 어종 조회
         if re.search(r"(오늘|지금|현재|금일|투데이).*(금어기)", user_text):
             fishes = get_fishes_in_seasonal_ban(fish_data, today)
             if not fishes:
@@ -75,7 +72,7 @@ def fishbot():
                 buttons.append({"label": disp, "action": "message", "messageText": disp})
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
-        # 월별 금어기 어종
+        # 월별 금어기 어종 조회
         m = re.search(r"(\d{1,2})월.*금어기", user_text)
         if m:
             month = int(m.group(1))
@@ -107,7 +104,7 @@ def fishbot():
                 buttons.append({"label": disp, "action": "message", "messageText": disp})
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
-        # 특정 어종 조회
+        # 특정 어종 금어기/금지체장 조회
         fish_norm = normalize_fish_name(user_text)
         logger.info(f"[DEBUG] 정규화된 어종명: {fish_norm}")
         logger.info(f"[DEBUG] fish_data에 존재?: {'있음' if fish_norm in fish_data else '없음'}")
@@ -116,8 +113,8 @@ def fishbot():
         logger.info(f"[DEBUG] 응답 텍스트:\n{text}")
         logger.info(f"[DEBUG] 버튼: {buttons}")
 
-        # fallback 방지: 버튼 없으면 기본 버튼 추가
-        if not buttons:
+        # fish_data에 어종이 없을 경우만 버튼 추가
+        if fish_norm not in fish_data:
             buttons = [{"label": "오늘의 금어기", "action": "message", "messageText": "오늘 금어기"}]
 
         return jsonify(build_response(text, buttons))
