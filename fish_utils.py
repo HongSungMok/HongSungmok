@@ -163,17 +163,18 @@ def get_fishes_in_seasonal_ban(fish_data: dict, target_date: datetime = None):
     if target_date is None:
         target_date = datetime.today()
     md = (target_date.month, target_date.day)
-    result = []
+    matched = []
+    seen = set()
+
     for name, info in fish_data.items():
         period = info.get("금어기")
-        if not period or "~" not in period:
+        if not isinstance(period, str) or "~" not in period:
             continue
         try:
             start, end = period.split("~")
             sm, sd = map(int, start.strip().split("."))
             if "익년" in end:
-                end = end.replace("익년", "").strip()
-                em, ed = map(int, end.split("."))
+                em, ed = map(int, end.replace("익년", "").strip().split("."))
                 in_range = md >= (sm, sd) or md <= (em, ed)
             else:
                 em, ed = map(int, end.strip().split("."))
@@ -181,8 +182,13 @@ def get_fishes_in_seasonal_ban(fish_data: dict, target_date: datetime = None):
                     in_range = (sm, sd) <= md <= (em, ed)
                 else:
                     in_range = md >= (sm, sd) or md <= (em, ed)
+
             if in_range:
-                result.append(name)
+                norm = normalize_fish_name(name)
+                if norm not in seen:
+                    matched.append(norm)
+                    seen.add(norm)
+
         except Exception as e:
             logger.warning(f"[금어기 파싱 오류] {name}: {period} / {e}")
-    return result
+    return matched
