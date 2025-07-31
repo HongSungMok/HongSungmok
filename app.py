@@ -46,8 +46,13 @@ def build_response(text, buttons=None):
             "outputs": [{"simpleText": {"text": text}}]
         }
     }
-    if buttons:
+
+    # 버튼이 없더라도 quickReplies를 항상 명시적으로 포함
+    if buttons is not None and isinstance(buttons, list):
         response["template"]["quickReplies"] = buttons
+    else:
+        response["template"]["quickReplies"] = []
+
     return response
 
 @app.route("/TAC", methods=["POST"])
