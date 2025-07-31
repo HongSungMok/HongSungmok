@@ -126,40 +126,8 @@ def get_fish_info(fish_name: str, fish_data: dict):
         ]
         return header + body, buttons
 
-    # 기본 금어기
-    total_ban = convert_period_format(fish.get("금어기"))
-    region_bans = [
-        (k.replace("_금어기", "").replace("_", " "), v)
-        for k, v in fish.items() if k.endswith("_금어기") and k != "금어기"
-    ]
-
-    # 기본 체장/체중
-    total_size = fish.get("금지체장") or fish.get("금지체중")
-    size_type = "📏 금지체장" if "금지체장" in fish else ("⚖️ 금지체중" if "금지체중" in fish else "📏 금지체장")
-    region_sizes = [
-        (k.replace("_금지체장", "").replace("_금지체중", "").replace("_", " "), v)
-        for k, v in fish.items() if k.endswith("_금지체장") or k.endswith("_금지체중")
-    ]
-
-    exception = fish.get("금어기_예외") or fish.get("예외사항") or "없음"
-    ratio = fish.get("포획비율제한", "없음")
-
-    # 출력 조립
-    body = f"🚫 금어기\n전국: {total_ban}\n"
-    shown_regions = set()
-    for region, period in region_bans:
-        body += f"{region}: {convert_period_format(period)}\n"
-        shown_regions.add(region.strip())
-    body += "\n"
-
-    body += f"{size_type}\n전국: {total_size if total_size else '없음'}\n"
-    for region, val in region_sizes:
-        body += f"{region}: {val}\n"
-        shown_regions.add(region.strip())
-    body += "\n"
-
-    # 기타 특이사항 출력 (중복 제거)
-    extra_keys = [
+    # 👇 이 항목들은 금어기 섹션에 포함될 보조 금어기 키
+    extra_ban_keys = [
         "금어기_해역_특이사항",
         "금어기_특정해역",
         "금어기_추가",
@@ -167,16 +135,44 @@ def get_fish_info(fish_name: str, fish_data: dict):
         "근해채낚기_연안복합_정치망_금어기",
         "근해채낚기, 연안복합, 정치망_금어기"
     ]
-    for key in extra_keys:
-        if key in fish:
-            region_label = key.replace("_", " ")
-            if region_label.strip() not in shown_regions:
-                body += f"⚠️ {region_label}: {convert_period_format(fish[key])}\n"
 
-    body += f"\n⚠️ 예외사항: {exception}\n"
+    # 🚫 금어기
+    body = "🚫 금어기\n"
+    body += f"전국: {convert_period_format(fish.get('금어기'))}\n"
+
+    # 지역별 금어기 (ex. 제주_금어기)
+    for k, v in fish.items():
+        if k.endswith("_금어기") and k != "금어기" and k not in extra_ban_keys:
+            region = k.replace("_금어기", "").replace("_", " ")
+            body += f"{region}: {convert_period_format(v)}\n"
+
+    # 보조 금어기 항목도 함께 출력
+    for key in extra_ban_keys:
+        if key in fish:
+            label = key.replace("_금어기", "").replace("_", " ")
+            body += f"{label}: {convert_period_format(fish[key])}\n"
+
+    body += "\n"
+
+    # 📏 금지체장 or 체중
+    size_type = "📏 금지체장" if "금지체장" in fish else ("⚖️ 금지체중" if "금지체중" in fish else "📏 금지체장")
+    total_size = fish.get("금지체장") or fish.get("금지체중")
+    body += f"{size_type}\n전국: {total_size if total_size else '없음'}\n"
+
+    for k, v in fish.items():
+        if k.endswith("_금지체장") or k.endswith("_금지체중"):
+            region = k.replace("_금지체장", "").replace("_금지체중", "").replace("_", " ")
+            body += f"{region}: {v}\n"
+
+    body += "\n"
+
+    # ⚠️ 예외사항 및 포획비율제한
+    exception = fish.get("금어기_예외") or fish.get("예외사항") or "없음"
+    ratio = fish.get("포획비율제한", "없음")
+    body += f"⚠️ 예외사항: {exception}\n"
     body += f"⚠️ 포획비율제한: {ratio}"
 
-    return header + body, []
+    return header + body.strip(), []
 
 def get_fishes_in_seasonal_ban(fish_data: dict, target_date: datetime = None):
     if target_date is None:
