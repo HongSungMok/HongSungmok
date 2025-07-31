@@ -40,19 +40,17 @@ def get_emoji(name: str) -> str:
     return fish_emojis.get(name, "🐟")
 
 def build_response(text, buttons=None):
+    logger.info(f"[DEBUG] build_response 호출됨. buttons: {buttons}")
     response = {
         "version": "2.0",
         "template": {
             "outputs": [{"simpleText": {"text": text}}]
         }
     }
-
-    # 버튼이 없더라도 quickReplies를 항상 명시적으로 포함
     if buttons is not None and isinstance(buttons, list):
         response["template"]["quickReplies"] = buttons
     else:
         response["template"]["quickReplies"] = []
-
     return response
 
 @app.route("/TAC", methods=["POST"])
@@ -61,7 +59,7 @@ def fishbot():
         req = request.get_json()
         user_text = req.get("userRequest", {}).get("utterance", "").strip()
         today = datetime.today()
-        logger.info(f"사용자 입력: {user_text}")
+        logger.info(f"[DEBUG] 사용자 입력: {user_text}")
 
         # 오늘 금어기 어종
         if re.search(r"(오늘|지금|현재|금일|투데이).*(금어기)", user_text):
@@ -111,11 +109,21 @@ def fishbot():
 
         # 특정 어종 조회
         fish_norm = normalize_fish_name(user_text)
+        logger.info(f"[DEBUG] 정규화된 어종명: {fish_norm}")
+        logger.info(f"[DEBUG] fish_data에 존재?: {'있음' if fish_norm in fish_data else '없음'}")
+
         text, buttons = get_fish_info(fish_norm, fish_data)
+        logger.info(f"[DEBUG] 응답 텍스트:\n{text}")
+        logger.info(f"[DEBUG] 버튼: {buttons}")
+
+        # fallback 방지: 버튼 없으면 기본 버튼 추가
+        if not buttons:
+            buttons = [{"label": "오늘의 금어기", "action": "message", "messageText": "오늘 금어기"}]
+
         return jsonify(build_response(text, buttons))
 
     except Exception as e:
-        logger.error(f"오류 발생: {e}")
+        logger.error(f"[ERROR] fishbot error: {e}")
         return jsonify(build_response("⚠️ 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."))
 
 if __name__ == "__main__":
