@@ -218,85 +218,88 @@ def fishbot():
         today = datetime.today()
         logger.info(f"사용자 입력: {user_text}")
 
-        # 오늘 금어기 조회
+        # 오늘 금어기 어종
         if re.search(r"(오늘|지금|현재|금일|투데이).*(금어기)", user_text):
-            fishes = get_fishes_in_today_ban(fish_data, today)
-            if not fishes:
-                return jsonify(build_response(f"📅 오늘({today.month}월 {today.day}일) 금어기 어종은 없습니다."))
-            normalized = [normalize_fish_name(f) or f for f in fishes]
-            grouped = group_by_category(normalized)
-            ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["갑각류"] + grouped["기타"]
-            lines = [f"📅 오늘({today.month}월 {today.day}일) 금어기 어종:"]
-            buttons = []
-            for f in ordered:
-                disp = get_display_name(f)
-                emoji = fish_emojis.get(f, "🐟")
-                lines.append(f"- {emoji} {disp}")
-                buttons.append({"label": disp, "action": "message", "messageText": disp})
-            return jsonify(build_response("\n".join(lines), buttons=buttons))
+            try:
+                fishes = get_fishes_in_today_ban(fish_data, today)
+                if not fishes:
+                    return jsonify(build_response(f"📅 오늘({today.month}월 {today.day}일) 금어기 어종은 없습니다."))
 
-        # 월별 금어기 조회
+                normalized = []
+                for f in fishes:
+                    norm = normalize_fish_name(f)
+                    if norm:
+                        normalized.append(norm)
+                    else:
+                        normalized.append(f)
+
+                grouped = group_by_category(normalized)
+                ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["갑각류"] + grouped["기타"]
+
+                lines = [f"📅 오늘({today.month}월 {today.day}일) 금어기 어종:"]
+                buttons = []
+                for f in ordered[:10]:  # 최대 10개만 버튼 출력 (카카오 제한)
+                    disp = get_display_name(f)
+                    emoji = fish_emojis.get(f, "🐟")
+                    lines.append(f"- {emoji} {disp}")
+                    buttons.append({"label": disp, "action": "message", "messageText": disp})
+
+                return jsonify(build_response("\n".join(lines), buttons=buttons))
+            except Exception as e:
+                logger.error(f"오늘 금어기 처리 오류: {e}")
+                return jsonify(build_response("⚠️ 금어기 정보를 가져오는 중 오류가 발생했습니다."))
+
+        # 월별 금어기 어종
         m = re.search(r"(\d{1,2})월.*금어기", user_text)
         if m:
-            month = int(m.group(1))
-            monthly_fish = []
-            for name, data in fish_data.items():
-                period = data.get("금어기")
-                if not period or "~" not in period:
-                    continue
-                try:
+            try:
+                month = int(m.group(1))
+                monthly_fish = []
+                for name, data in fish_data.items():
+                    period = data.get("금어기")
+                    if not period or "~" not in period:
+                        continue
                     sm = int(period.split("~")[0].strip().split(".")[0])
                     em = int(period.split("~")[1].replace("익년", "").strip().split(".")[0])
-                except Exception as e:
-                    logger.error(f"월별 금어기 파싱 오류: {e}")
-                    continue
-                if sm <= em:
-                    if sm <= month <= em:
-                        monthly_fish.append(name)
-                else:
-                    if month >= sm or month <= em:
-                        monthly_fish.append(name)
-            if not monthly_fish:
-                return jsonify(build_response(f"📅 {month}월 금어기인 어종이 없습니다."))
-            normalized = [normalize_fish_name(f) or f for f in monthly_fish]
-            grouped = group_by_category(normalized)
-            ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["갑각류"] + grouped["기타"]
-            lines = [f"📅 {month}월 금어기 어종:"]
-            buttons = []
-            for f in ordered:
-                disp = get_display_name(f)
-                emoji = fish_emojis.get(f, "🐟")
-                lines.append(f"- {emoji} {disp}")
-                buttons.append({"label": disp, "action": "message", "messageText": disp})
-            return jsonify(build_response("\n".join(lines), buttons=buttons))
+                    if sm <= em:
+                        if sm <= month <= em:
+                            monthly_fish.append(name)
+                    else:
+                        if month >= sm or month <= em:
+                            monthly_fish.append(name)
 
-        # 특정 어종 조회
+                if not monthly_fish:
+                    return jsonify(build_response(f"📅 {month}월 금어기인 어종이 없습니다."))
+
+                normalized = [normalize_fish_name(f) or f for f in monthly_fish]
+                grouped = group_by_category(normalized)
+                ordered = grouped["어류"] + grouped["두족류"] + grouped["폐류"] + grouped["갑각류"] + grouped["기타"]
+
+                lines = [f"📅 {month}월 금어기 어종:"]
+                buttons = []
+                for f in ordered[:10]:
+                    disp = get_display_name(f)
+                    emoji = fish_emojis.get(f, "🐟")
+                    lines.append(f"- {emoji} {disp}")
+                    buttons.append({"label": disp, "action": "message", "messageText": disp})
+
+                return jsonify(build_response("\n".join(lines), buttons=buttons))
+            except Exception as e:
+                logger.error(f"월별 금어기 처리 오류: {e}")
+                return jsonify(build_response("⚠️ 월별 금어기 정보를 불러오는 중 오류가 발생했습니다."))
+
+        # 특정 어종 정보 조회
         fish_norm = normalize_fish_name(user_text)
         if fish_norm and fish_norm in fish_data:
-            text = format_fish_info(fish_norm, fish_data[fish_norm])
-            return jsonify(build_response(text))
+            try:
+                text = format_fish_info(fish_norm, fish_data[fish_norm])
+                return jsonify(build_response(text))
+            except Exception as e:
+                logger.error(f"어종 정보 응답 오류: {e}")
+                return jsonify(build_response("⚠️ 어종 정보를 가져오는 중 오류가 발생했습니다."))
 
-        # 어종 인식 실패 시 기본 안내
-        disp_name = get_display_name(fish_norm) if fish_norm else user_text
-        body = (
-            f"🐟 {disp_name} 🐟\n\n"
-            "🚫 금어기\n전국: 없음\n\n"
-            "📏 금지체장\n전국: 없음\n\n"
-            "⚠️ 예외사항: 없음\n"
-            "⚠️ 포획비율제한: 없음\n\n"
-            "✨ 오늘의 금어기를 알려드릴까요?"
-        )
-        buttons = [
-            {
-                "label": "오늘의 금어기",
-                "action": "message",
-                "messageText": "오늘 금어기"
-            }
-        ]
-        return jsonify(build_response(body, buttons=buttons))
-
-    except Exception as e:
-        logger.error(f"fishbot error: {e}")
+        except Exception as e:
+        logger.error(f"[전체 오류] fishbot 처리 중 예외: {e}")
         return jsonify(build_response("⚠️ 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."))
 
 if __name__ == "__main__":
