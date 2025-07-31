@@ -157,30 +157,10 @@ def normalize_fish_name(text):
     text = re.sub(r"\(.*?\)", "", text)
     text = re.sub(r"[^\uAC00-\uD7A3a-z0-9\s]", "", text)
     text = text.strip()
-    all_names = list(fish_aliases.keys())
-    for name in sorted(all_names, key=lambda x: -len(x)):
-        pattern = r'\b' + re.escape(name) + r'\b'
-        if re.search(pattern, text):
+    for name in sorted(fish_aliases.keys(), key=lambda x: -len(x)):
+        if name in text:
             return fish_aliases.get(name, name)
     return None
-
-def get_display_name(fish_name):
-    return display_name_map.get(fish_name, re.sub(r"\(.*?\)", "", fish_name))
-
-def format_fish_info(fish_name, data):
-    emoji = fish_emojis.get(fish_name, "🐟")
-    display = get_display_name(fish_name)
-    period = data.get("금어기") or "없음"
-    size = data.get("금지체장") or "없음"
-    exception = data.get("예외사항") or "없음"
-    ratio = data.get("포획비율제한") or "없음"
-    return (
-        f"{emoji} {display} {emoji}\n\n"
-        f"🚫 금어기\n전국: {period}\n\n"
-        f"📏 금지체장\n전국: {size}\n\n"
-        f"⚠️ 예외사항: {exception}\n"
-        f"⚠️ 포획비율제한: {ratio}\n"
-    )
 
 def is_date_in_period(period, date):
     try:
@@ -224,7 +204,7 @@ def build_response(text, buttons=None):
         response["template"]["quickReplies"] = buttons
     return response
 
-app.route("/TAC", methods=["POST"])
+@app.route("/TAC", methods=["POST"])
 def fishbot():
     try:
         req = request.get_json()
@@ -232,7 +212,7 @@ def fishbot():
         today = datetime.today()
         logger.info(f"사용자 입력: {user_text}")
 
-        # 오늘 금어기 조회
+        # 오늘 금어기
         if re.search(r"(오늘|지금|현재|금일|투데이).*(금어기)", user_text):
             fishes = get_fishes_in_today_ban(fish_data, today)
             if not fishes:
@@ -249,7 +229,7 @@ def fishbot():
                 buttons.append({"label": disp, "action": "message", "messageText": disp})
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
-        # 월별 금어기 조회
+        # 월별 금어기
         m = re.search(r"(\d{1,2})월.*금어기", user_text)
         if m:
             month = int(m.group(1))
@@ -284,7 +264,7 @@ def fishbot():
                 buttons.append({"label": disp, "action": "message", "messageText": disp})
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
-        # 특정 어종 정보 조회
+        # 특정 어종 정보
         fish_norm = normalize_fish_name(user_text)
         if fish_norm and fish_norm in fish_data:
             text = format_fish_info(fish_norm, fish_data[fish_norm])
