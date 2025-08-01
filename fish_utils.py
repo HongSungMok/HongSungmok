@@ -172,22 +172,17 @@ def get_fishes_in_seasonal_ban(fish_data: dict, target_date: datetime = None):
         try:
             start, end = period.split("~")
             sm, sd = map(int, start.strip().split("."))
+            em_str = end.replace("익년", "").strip()
+            em, ed = map(int, em_str.split("."))
+
             if "익년" in end:
-                em, ed = map(int, end.replace("익년", "").strip().split("."))
                 in_range = md >= (sm, sd) or md <= (em, ed)
             else:
-                em, ed = map(int, end.strip().split("."))
-                if (sm, sd) <= (em, ed):
-                    in_range = (sm, sd) <= md <= (em, ed)
-                else:
-                    in_range = md >= (sm, sd) or md <= (em, ed)
+                in_range = (sm, sd) <= md <= (em, ed) if (sm, sd) <= (em, ed) else md >= (sm, sd) or md <= (em, ed)
 
-            if in_range:
-                norm = normalize_fish_name(name)
-                if norm not in seen:
-                    matched.append(norm)
-                    seen.add(norm)
-
+            if in_range and name not in seen:
+                matched.append(name)
+                seen.add(name)
         except Exception as e:
             logger.warning(f"[금어기 파싱 오류] {name}: {period} / {e}")
     return matched
