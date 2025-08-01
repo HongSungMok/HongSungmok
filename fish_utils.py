@@ -161,6 +161,7 @@ def get_fish_info(fish_name: str, fish_data: dict):
 def get_fishes_in_seasonal_ban(fish_data: dict, target_date: datetime = None):
     if target_date is None:
         target_date = datetime.today()
+    
     md = (target_date.month, target_date.day)
     matched = []
     seen = set()
@@ -169,20 +170,27 @@ def get_fishes_in_seasonal_ban(fish_data: dict, target_date: datetime = None):
         period = info.get("금어기")
         if not isinstance(period, str) or "~" not in period:
             continue
+
         try:
             start, end = period.split("~")
             sm, sd = map(int, start.strip().split("."))
-            em_str = end.replace("익년", "").strip()
-            em, ed = map(int, em_str.split("."))
 
             if "익년" in end:
+                em, ed = map(int, end.replace("익년", "").strip().split("."))
                 in_range = md >= (sm, sd) or md <= (em, ed)
             else:
-                in_range = (sm, sd) <= md <= (em, ed) if (sm, sd) <= (em, ed) else md >= (sm, sd) or md <= (em, ed)
+                em, ed = map(int, end.strip().split("."))
+                in_range = (sm, sd) <= md <= (em, ed)
 
-            if in_range and name not in seen:
-                matched.append(name)
-                seen.add(name)
+            if in_range:
+                # 어종 이름을 정규화하고 중복 방지
+                norm = fish_name_aliases.get(name, name)
+                if norm not in seen:
+                    matched.append(name)  # 원본 이름 그대로 반환
+                    seen.add(norm)
+
         except Exception as e:
             logger.warning(f"[금어기 파싱 오류] {name}: {period} / {e}")
+            continue
+
     return matched
