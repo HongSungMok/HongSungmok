@@ -64,19 +64,12 @@ def build_response(text, buttons=None):
 
 
 def is_today_ban_query(text: str) -> bool:
-    """
-    '오늘 금어기', '오늘의 금어기', '금어기 오늘', '오늘금어기', 이모지/특수문자 포함 등
-    다양한 변형을 순서 무관 & 공백/기호 내성으로 인식.
-    """
     if not text:
         return False
     logger.info(f"[DEBUG] raw utterance repr: {text!r}")
     t = text.strip()
-    # 공백류 제거
     t = re.sub(r"\s+", "", t)
-    # 흔한 기호/문장부호 제거(매칭 관대화)
     t = re.sub(r"[~!@#\$%\^&\*\(\)\-\_\+\=\[\]\{\}\|\\;:'\",\.<>\/\?·…•—–]", "", t)
-    # 조사/불용어 미세 제거
     t = t.replace("의", "")
     has_time = any(tok in t for tok in INTENT_TIME_TOKENS)
     has_ban = ("금어기" in t)
@@ -84,13 +77,8 @@ def is_today_ban_query(text: str) -> bool:
 
 
 def extract_month_query(text: str):
-    """
-    '7월 금어기', '금어기 7월', '7 월 금어기' 등의 변형을 인식해 월(int)을 반환.
-    못 찾으면 None.
-    """
     if not text:
         return None
-    # 공백 허용, 순서 2가지 모두 처리
     m1 = re.search(r"(\d{1,2})\s*월.*금어기", text)
     m2 = re.search(r"금어기.*?(\d{1,2})\s*월", text)
     m = m1 or m2
@@ -116,13 +104,16 @@ def fishbot():
         today = datetime.now(KST)
         logger.info(f"[DEBUG] 사용자 입력: {user_text}")
 
-        # 1) 오늘 금어기 의도 인식(순서 무관/특수문자 내성)
+        # 1) 오늘 금어기
         if is_today_ban_query(user_text):
             fishes = get_fishes_in_seasonal_ban(fish_data, today)
             if not fishes:
-                return jsonify(build_response(f"📅 오늘({today.month}월 {today.day}일) 금어기 어종은 없습니다."))
+                return jsonify(build_response(
+                    f"📅 오늘({today.month}월 {today.day}일) 금어기 어종은 없습니다.",
+                    buttons=[{"label": "오늘의 금어기", "action": "message", "messageText": "오늘 금어기"}]
+                ))
             lines = [f"📅 오늘({today.month}월 {today.day}일) 금어기 어종:"]
-            buttons = []
+            buttons = [{"label": "오늘의 금어기", "action": "message", "messageText": "오늘 금어기"}]  # 유지 버튼
             for name in fishes:
                 disp = get_display_name(name)
                 emoji = get_emoji(name)
@@ -130,7 +121,7 @@ def fishbot():
                 buttons.append({"label": disp, "action": "message", "messageText": disp})
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
-        # 2) 월별 금어기 어종 조회(순서 유연)
+        # 2) 월별 금어기
         month = extract_month_query(user_text)
         if month is not None:
             result = []
@@ -143,11 +134,9 @@ def fishbot():
                     sm = int(start.strip().split(".")[0])
                     em = int(end.replace("익년", "").strip().split(".")[0])
                     if sm <= em:
-                        # 같은 해 범위
                         if sm <= month <= em:
                             result.append(name)
                     else:
-                        # 연도 걸침(예: 11~익년2)
                         if month >= sm or month <= em:
                             result.append(name)
                 except Exception as ex:
@@ -155,9 +144,12 @@ def fishbot():
                     continue
 
             if not result:
-                return jsonify(build_response(f"📅 {month}월 금어기 어종은 없습니다."))
+                return jsonify(build_response(
+                    f"📅 {month}월 금어기 어종은 없습니다.",
+                    buttons=[{"label": f"{month}월 금어기", "action": "message", "messageText": f"{month}월 금어기"}]
+                ))
             lines = [f"📅 {month}월 금어기 어종:"]
-            buttons = []
+            buttons = [{"label": f"{month}월 금어기", "action": "message", "messageText": f"{month}월 금어기"}]  # 유지 버튼
             for name in result:
                 disp = get_display_name(name)
                 emoji = get_emoji(name)
@@ -165,7 +157,7 @@ def fishbot():
                 buttons.append({"label": disp, "action": "message", "messageText": disp})
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
-        # 3) 특정 어종 금어기/금지체장 조회
+        # 3) 특정 어종 정보
         fish_norm = normalize_fish_name(user_text)
         logger.info(f"[DEBUG] 정규화된 어종명: {fish_norm}")
         logger.info(f"[DEBUG] fish_data에 존재?: {'있음' if fish_norm in fish_data else '없음'}")
@@ -174,7 +166,6 @@ def fishbot():
         logger.info(f"[DEBUG] 응답 텍스트:\n{text}")
         logger.info(f"[DEBUG] 버튼: {buttons}")
 
-        # fish_data에 어종이 없을 경우만 기본 버튼 추가
         if fish_norm not in fish_data:
             buttons = [{"label": "오늘의 금어기", "action": "message", "messageText": "오늘 금어기"}]
 
@@ -190,5 +181,4 @@ def fishbot():
 # ──────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    # 개발 중에는 debug=True 고려 가능. 운영 배포 시 False 권장.
     app.run(host="0.0.0.0", port=port)
