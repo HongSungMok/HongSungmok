@@ -3,12 +3,13 @@ from datetime import datetime, timezone, timedelta
 import logging
 import os
 import re
+import calendar
 
 from fish_data import fish_data
 from fish_utils import (
     normalize_fish_name,
     get_fish_info,
-    get_fishes_in_seasonal_ban,
+    # get_fishes_in_seasonal_ban,  # 속도/의존성 이슈 방지 위해 내부 구현 사용
 )
 
 app = Flask(__name__)
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 # 환경/상수
 # ──────────────────────────────────────────────────────────────────────────────
 KST = timezone(timedelta(hours=9))  # 한국 시간대 고정
+MAX_QR = 10  # Kakao quickReplies 최대 10개
 
 # 사용자에게 보여줄 어종명 맵핑
 display_name_map = {
@@ -46,35 +48,35 @@ INTENT_TIME_TOKENS = ("오늘", "지금", "현재", "금일", "투데이")
 def get_display_name(name: str) -> str:
     return display_name_map.get(name, name)
 
-
 def get_emoji(name: str) -> str:
     return fish_emojis.get(name, "🐟")
 
+def cap_quick_replies(buttons):
+    """Kakao 제한(<=10) 보장"""
+    return (buttons or [])[:MAX_QR]
 
 def build_response(text, buttons=None):
-    logger.info(f"[DEBUG] build_response 호출됨. buttons: {buttons}")
-    response = {
+    buttons_capped = cap_quick_replies(buttons)
+    logger.info(f"[DEBUG] build_response buttons_count={len(buttons_capped)}")
+    return {
         "version": "2.0",
         "template": {
             "outputs": [{"simpleText": {"text": text}}],
-            "quickReplies": buttons if buttons else [],
+            "quickReplies": buttons_capped,
         },
     }
-    return response
-
 
 def is_today_ban_query(text: str) -> bool:
     if not text:
         return False
-    logger.info(f"[DEBUG] raw utterance repr: {text!r}")
-    t = text.strip()
+    t = (text or "").strip()
+    logger.info(f"[DEBUG] raw utterance repr: {t!r}")
     t = re.sub(r"\s+", "", t)
     t = re.sub(r"[~!@#\$%\^&\*\(\)\-\_\+\=\[\]\{\}\|\\;:'\",\.<>\/\?·…•—–]", "", t)
     t = t.replace("의", "")
     has_time = any(tok in t for tok in INTENT_TIME_TOKENS)
     has_ban = ("금어기" in t)
     return has_time and has_ban
-
 
 def extract_month_query(text: str):
     if not text:
@@ -92,6 +94,73 @@ def extract_month_query(text: str):
         pass
     return None
 
+# ──────────────────────────────────────────────────────────────────────────────
+# 금어기 계산(오늘 기준, 초고속 로직)
+# ──────────────────────────────────────────────────────────────────────────────
+def _parse_md(token: str):
+    """'M.D' 또는 'M' 형태를 (month, day)로. day가 없으면 1(시작), 말일(종료)로 상위에서 처리."""
+    token = token.strip()
+    token = token.replace("익년", "").strip()
+    if "." in token:
+        m_str, d_str = token.split(".", 1)
+        m = int(m_str)
+        d = int(re.sub(r"\D", "", d_str) or 1)
+    else:
+        m = int(re.sub(r"\D", "", token))
+        d = 1
+    return m, d
+
+def _in_range(md, start_md, end_md):
+    """월/일만으로 범위 포함 여부(연도 걸침 지원)."""
+    sm, sd = start_md
+    em, ed = end_md
+    m, d = md
+    if (sm, sd) <= (em, ed):
+        return (sm, sd) <= (m, d) <= (em, ed)
+    else:
+        # 연도 걸침
+        return (m, d) >= (sm, sd) or (m, d) <= (em, ed)
+
+def today_banned_fishes(today_dt):
+    """fish_data의 '금어기'를 빠르게 판독해 오늘 포함 어종 리스트 반환."""
+    m = today_dt.month
+    d = today_dt.day
+    md = (m, d)
+    banned = []
+
+    for name, info in fish_data.items():
+        period = (info or {}).get("금어기")
+        if not period or "~" not in period:
+            continue
+        try:
+            start, end = [p.strip() for p in period.split("~", 1)]
+
+            sm, sd = _parse_md(start)
+            em, ed = _parse_md(end)
+
+            # 일자가 빠진 경우 보정(시작=1일, 종료=말일)
+            if "." not in start:
+                sd = 1
+            if "." not in end:
+                # 말일
+                ed = calendar.monthrange(2024, em)[1]  # 연도 무관, 말일만 필요
+
+            if _in_range(md, (sm, sd), (em, ed)):
+                banned.append(name)
+        except Exception as ex:
+            logger.warning(f"[WARN] 금어기 파싱 실패: {name} - {period} ({ex})")
+            continue
+
+    return banned
+
+def build_fish_buttons(fishes):
+    buttons = []
+    for name in fishes:
+        disp = get_display_name(name)
+        buttons.append({"label": disp, "action": "message", "messageText": disp})
+        if len(buttons) >= MAX_QR:
+            break
+    return buttons
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 라우트
@@ -106,24 +175,18 @@ def fishbot():
 
         # 1) 오늘 금어기
         if is_today_ban_query(user_text):
-            fishes = get_fishes_in_seasonal_ban(fish_data, today)
+            fishes = today_banned_fishes(today)
             if not fishes:
                 return jsonify(build_response(
                     f"📅 오늘({today.month}월 {today.day}일) 금어기 어종은 없습니다.",
-                    # 유지 버튼 (원하시면 이 라인 제거 가능)
-                    buttons=[{"label": "오늘의 금어기", "action": "message", "messageText": "오늘 금어기"}]
+                    buttons=[]  # 버튼 없음
                 ))
 
+            # 텍스트는 모두 표시, 버튼은 최대 10개까지만
             lines = [f"📅 오늘({today.month}월 {today.day}일) 금어기 어종:"]
-            # 유지 버튼(요청 없으므로 그대로 둠). 필요 없다면 아래 두 줄을 삭제하세요.
-            buttons = [{"label": "오늘의 금어기", "action": "message", "messageText": "오늘 금어기"}]
-
-            # 어종 버튼 추가
             for name in fishes:
-                disp = get_display_name(name)
-                emoji = get_emoji(name)
-                lines.append(f"- {emoji} {disp}")
-                buttons.append({"label": disp, "action": "message", "messageText": disp})
+                lines.append(f"- {get_emoji(name)} {get_display_name(name)}")
+            buttons = build_fish_buttons(fishes)
 
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
@@ -136,16 +199,14 @@ def fishbot():
                 if not period or "~" not in period:
                     continue
                 try:
-                    start, end = period.split("~")
-                    sm = int(start.strip().split(".")[0])
-                    em = int(end.replace("익년", "").strip().split(".")[0])
+                    start, end = [p.strip() for p in period.split("~", 1)]
+                    sm = int(_parse_md(start)[0])
+                    em = int(_parse_md(end)[0])
 
                     if sm <= em:
-                        # 같은 해 안에서 시작~종료
                         if sm <= month <= em:
                             result.append(name)
                     else:
-                        # 연도 걸침(예: 11~익년 2)
                         if month >= sm or month <= em:
                             result.append(name)
                 except Exception as ex:
@@ -153,17 +214,12 @@ def fishbot():
                     continue
 
             if not result:
-                # ✅ 월 버튼 없이, 어종도 없으니 빈 버튼 배열로 반환
                 return jsonify(build_response(f"📅 {month}월 금어기 어종은 없습니다.", buttons=[]))
 
             lines = [f"📅 {month}월 금어기 어종:"]
-            # ✅ 요청사항: "8월 금어기" 같은 월 버튼 제거 → 어종 버튼만 제공
-            buttons = []
             for name in result:
-                disp = get_display_name(name)
-                emoji = get_emoji(name)
-                lines.append(f"- {emoji} {disp}")
-                buttons.append({"label": disp, "action": "message", "messageText": disp})
+                lines.append(f"- {get_emoji(name)} {get_display_name(name)}")
+            buttons = build_fish_buttons(result)  # 월 버튼 제거, 어종 버튼만(최대 10)
 
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
@@ -173,19 +229,14 @@ def fishbot():
         logger.info(f"[DEBUG] fish_data에 존재?: {'있음' if fish_norm in fish_data else '없음'}")
 
         text, buttons = get_fish_info(fish_norm, fish_data)
-        logger.info(f"[DEBUG] 응답 텍스트:\n{text}")
-        logger.info(f"[DEBUG] 버튼: {buttons}")
-
-        if fish_norm not in fish_data:
-            # 미등록 어종 질의 시에도 버튼이 사라지지 않도록 기본 버튼(선택 사항)
-            buttons = [{"label": "오늘의 금어기", "action": "message", "messageText": "오늘 금어기"}]
+        # 안전장치: 혹시 get_fish_info가 10개 넘게 돌려줄 수 있으니 제한
+        buttons = cap_quick_replies(buttons)
 
         return jsonify(build_response(text, buttons))
 
     except Exception as e:
-        logger.error(f"[ERROR] fishbot error: {e}", exc_info=True)
-        return jsonify(build_response("⚠️ 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."))
-
+        logger.error(f("[ERROR] fishbot error: %s", e), exc_info=True)
+        return jsonify(build_response("⚠️ 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", buttons=[]))
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 엔트리 포인트
@@ -193,3 +244,4 @@ def fishbot():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
