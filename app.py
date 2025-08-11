@@ -110,15 +110,21 @@ def fishbot():
             if not fishes:
                 return jsonify(build_response(
                     f"📅 오늘({today.month}월 {today.day}일) 금어기 어종은 없습니다.",
+                    # 유지 버튼 (원하시면 이 라인 제거 가능)
                     buttons=[{"label": "오늘의 금어기", "action": "message", "messageText": "오늘 금어기"}]
                 ))
+
             lines = [f"📅 오늘({today.month}월 {today.day}일) 금어기 어종:"]
-            buttons = [{"label": "오늘의 금어기", "action": "message", "messageText": "오늘 금어기"}]  # 유지 버튼
+            # 유지 버튼(요청 없으므로 그대로 둠). 필요 없다면 아래 두 줄을 삭제하세요.
+            buttons = [{"label": "오늘의 금어기", "action": "message", "messageText": "오늘 금어기"}]
+
+            # 어종 버튼 추가
             for name in fishes:
                 disp = get_display_name(name)
                 emoji = get_emoji(name)
                 lines.append(f"- {emoji} {disp}")
                 buttons.append({"label": disp, "action": "message", "messageText": disp})
+
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
         # 2) 월별 금어기
@@ -133,10 +139,13 @@ def fishbot():
                     start, end = period.split("~")
                     sm = int(start.strip().split(".")[0])
                     em = int(end.replace("익년", "").strip().split(".")[0])
+
                     if sm <= em:
+                        # 같은 해 안에서 시작~종료
                         if sm <= month <= em:
                             result.append(name)
                     else:
+                        # 연도 걸침(예: 11~익년 2)
                         if month >= sm or month <= em:
                             result.append(name)
                 except Exception as ex:
@@ -144,17 +153,18 @@ def fishbot():
                     continue
 
             if not result:
-                return jsonify(build_response(
-                    f"📅 {month}월 금어기 어종은 없습니다.",
-                    buttons=[{"label": f"{month}월 금어기", "action": "message", "messageText": f"{month}월 금어기"}]
-                ))
+                # ✅ 월 버튼 없이, 어종도 없으니 빈 버튼 배열로 반환
+                return jsonify(build_response(f"📅 {month}월 금어기 어종은 없습니다.", buttons=[]))
+
             lines = [f"📅 {month}월 금어기 어종:"]
-            buttons = [{"label": f"{month}월 금어기", "action": "message", "messageText": f"{month}월 금어기"}]  # 유지 버튼
+            # ✅ 요청사항: "8월 금어기" 같은 월 버튼 제거 → 어종 버튼만 제공
+            buttons = []
             for name in result:
                 disp = get_display_name(name)
                 emoji = get_emoji(name)
                 lines.append(f"- {emoji} {disp}")
                 buttons.append({"label": disp, "action": "message", "messageText": disp})
+
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
         # 3) 특정 어종 정보
@@ -167,6 +177,7 @@ def fishbot():
         logger.info(f"[DEBUG] 버튼: {buttons}")
 
         if fish_norm not in fish_data:
+            # 미등록 어종 질의 시에도 버튼이 사라지지 않도록 기본 버튼(선택 사항)
             buttons = [{"label": "오늘의 금어기", "action": "message", "messageText": "오늘 금어기"}]
 
         return jsonify(build_response(text, buttons))
