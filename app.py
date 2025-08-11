@@ -235,7 +235,7 @@ def fishbot():
         return jsonify(build_response(text, buttons))
 
     except Exception as e:
-        logger.error(f("[ERROR] fishbot error: %s", e), exc_info=True)
+        logger.error(f"[ERROR] fishbot error: {e}", exc_info=True)
         return jsonify(build_response("⚠️ 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", buttons=[]))
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -243,5 +243,4 @@ def fishbot():
 # ──────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
-
+    app.run(host="0.0.0.0", port=port)  # ✅ 외부 바인딩
