@@ -343,7 +343,7 @@ def render_depletion_summary(fish_norm, industry, port, rows, ref_date=None, top
     lines = [f"📈 {disp} {industry} — {port} 소진현황", period_line, ""]
     for r in rows[:top_n]:
         lines.append(
-            f"{r.get('선명')}\n"
+            f"⚓{r.get('선명')}\n"
             f"할당량: {fmt_num(r.get('할당량'))} kg\n"
             f"금주소진량: {fmt_num(r.get('금주소진량'))} kg\n"
             f"누계: {fmt_num(r.get('누계'))} kg\n"
@@ -360,12 +360,12 @@ def render_weekly_vessel_catch(fish_norm, industry, port, rows, ref_date=None):
     disp = display_name(fish_norm)
 
     if not rows:
-        return f"📅 {disp} {industry} — {port} 주간별 어획량\n{period_line}\n\n데이터 준비중입니다."
+        return f"📋 {disp} {industry} — {port} 주간별 어획량\n{period_line}\n\n데이터 준비중입니다."
 
-    lines = [f"📅 {disp} {industry} — {port} 주간별 어획량", period_line, ""]
+    lines = [f"📋{port} 주간별 어획량", "(금주)", ""]
     for r in rows:
         lines.append(
-            f"{r.get('선명')}\n"
+            f"⚓{r.get('선명')}\n"
             f"주어종 어획량: {fmt_num(r.get('주어종어획량'))} kg\n"
             f"부수어획 어획량: {fmt_num(r.get('부수어획어획량'))} kg\n"
         )
@@ -381,10 +381,10 @@ def render_season_vessel_catch(fish_norm, industry, port, rows, ref_date=None):
     if not rows:
         return f"🗂 {disp} {industry} — {port} 전체기간 어획량\n{label}\n\n데이터 준비중입니다."
 
-    lines = [f"🗂 {disp} {industry} — {port} 전체기간 어획량", label, ""]
+    lines = ["전체기간 어획량", "(25~26어기)", ""]
     for r in rows:
         lines.append(
-            f"{r.get('선명')}\n"
+            f"⚓{r.get('선명')}\n"
             f"주어종 어획량: {fmt_num(r.get('주어종어획량'))} kg\n"
             f"부수어획 어획량: {fmt_num(r.get('부수어획어획량'))} kg\n"
         )
