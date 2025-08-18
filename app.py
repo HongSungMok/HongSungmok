@@ -21,7 +21,8 @@ from TAC_data import (
 from TAC_data_sources import (
     get_weekly_report,
     get_depletion_rows,
-    get_catch_timeseries,
+    get_weekly_vessel_catch,
+    get_season_vessel_catch,
 )
 
 app = Flask(__name__)
@@ -62,6 +63,43 @@ _PUNCT_RE = re.compile(r"[~!@#\$%\^&\*\(\)\-\_\+\=\[\]\{\}\|\\;:'\",\.<>\/\?·�
 _MONTH_END = {m: calendar.monthrange(2024, m)[1] for m in range(1, 13)}
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 주차/기간 유틸 (요청 규칙)
+#  - 기간: 항상 토요일 ~ 금요일
+#  - 주차 기준: 그 주의 '목요일'이 속한 월의 n주차
+#  - 제목 아래 기간 표기: (YYYY.MM.DD~MM.DD)
+# ──────────────────────────────────────────────────────────────────────────────
+def week_range_and_index_for(date: datetime):
+    """
+    주어진 날짜가 포함된 '토~금' 주간의 범위와
+    그 주의 목요일 기준 (월, n주차, 해당 목요일의 연도)를 계산.
+    """
+    # 해당 주의 토요일
+    # Python weekday: Mon=0 ... Sun=6, Sat=5
+    delta_to_sat = (date.weekday() - 5) % 7
+    sat = (date - timedelta(days=delta_to_sat)).date()
+    fri = sat + timedelta(days=6)
+    thu = sat + timedelta(days=5)  # 토(0)~목(5)
+
+    # '목요일'이 속한 달의 첫 '목요일'
+    first_day = thu.replace(day=1)
+    first_thu = first_day
+    while first_thu.weekday() != 3:  # Thu=3
+        first_thu += timedelta(days=1)
+    # n주차 계산
+    week_idx = 1 + (thu - first_thu).days // 7
+    return sat, fri, thu.month, week_idx, thu.year
+
+def fmt_period_line(sat, fri):
+    # 예: (2025.08.09~08.15)
+    return f"({sat.strftime('%Y.%m.%d')}~{fri.strftime('%m.%d')})"
+
+def season_label_from_year(y: int):
+    # 예: (25~26년 어기)
+    a = y % 100
+    b = (y + 1) % 100
+    return f"({a:02d}~{b:02d}년 어기)"
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 공용 유틸
 # ──────────────────────────────────────────────────────────────────────────────
 def cap_quick_replies(buttons): return (buttons or [])[:MAX_QR]
@@ -78,16 +116,12 @@ def fmt_num(v):
     return str(v)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# TAC 키 해결(핵심 보강)
+# TAC 키 해결
 # ──────────────────────────────────────────────────────────────────────────────
+from TAC_data import get_aliases as tac_aliases
 def resolve_tac_key(fish_norm: str):
-    """
-    normalize_fish_name() 결과(예: '살오징어(오징어)')를
-    TAC_DATA 표준 키(예: '살오징어')로 매핑.
-    """
     if is_tac_species(fish_norm):
         return fish_norm
-    # display/aliases 매칭
     for sp, meta in TAC_DATA.items():
         disp = meta.get("display")
         aliases = set(meta.get("aliases", []))
@@ -247,14 +281,20 @@ def extract_month_query(text: str):
     return None
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 렌더러
+# 렌더러 (요청 포맷 반영)
 # ──────────────────────────────────────────────────────────────────────────────
-def render_weekly_report(fish_norm, industry, port, data):
-    disp = display_name(fish_norm)
+def render_weekly_report(fish_norm, industry, port, data, ref_date=None):
+    if not ref_date:
+        ref_date = datetime.now(KST)
+    sat, fri, m, week_idx, y = week_range_and_index_for(ref_date)
+    period_line = fmt_period_line(sat, fri)
+
     if not data:
-        return f"📊 {disp} {industry} — {port} 주간보고\n\n데이터 준비중입니다."
+        return f"📊 {m}월 {week_idx}주차 주간보고\n{period_line}\n\n데이터 준비중입니다."
+
     lines = [
-        f"📊 {disp} {industry} — {port} 주간보고",
+        f"📊 {m}월 {week_idx}주차 주간보고",
+        period_line,
         "",
         f"• 배정량: {fmt_num(data.get('배정량'))} kg",
         f"• 배분량: {fmt_num(data.get('배분량'))} kg",
@@ -272,52 +312,80 @@ def render_weekly_report(fish_norm, industry, port, data):
         lines.append(f"• 누락량: {fmt_num(data.get('누락량'))} kg")
     return "\n".join(lines)
 
-def render_depletion_summary(fish_norm, industry, port, rows, top_n=8):
+def render_depletion_summary(fish_norm, industry, port, rows, ref_date=None, top_n=8):
+    if not ref_date:
+        ref_date = datetime.now(KST)
+    sat, fri, m, week_idx, y = week_range_and_index_for(ref_date)
+    period_line = fmt_period_line(sat, fri)
     disp = display_name(fish_norm)
+
     if not rows:
-        return f"📈 {disp} {industry} — {port} 소진현황\n\n데이터 준비중입니다."
-    tot_alloc = sum((r.get("할당량") or 0) for r in rows)
-    tot_week = sum((r.get("금주소진량") or 0) for r in rows)
-    tot_cum  = sum((r.get("누계") or 0) for r in rows)
+        return f"📈 {disp} {industry} — {port} 소진현황\n{period_line}\n\n데이터 준비중입니다."
+
     lines = [
         f"📈 {disp} {industry} — {port} 소진현황",
+        period_line,
         "",
-        f"• 할당량 합계: {fmt_num(tot_alloc)} kg",
-        f"• 금주 소진 합계: {fmt_num(tot_week)} kg",
-        f"• 누계 합계: {fmt_num(tot_cum)} kg",
-        "",
-        f"상위 {min(top_n, len(rows))}척 요약:",
     ]
     for r in rows[:top_n]:
         lines.append(
-            f"- {r.get('선명')} / 톤수 {fmt_num(r.get('톤수'))}t / "
-            f"할당 {fmt_num(r.get('할당량'))} / 금주 {fmt_num(r.get('금주소진량'))} / "
-            f"누계 {fmt_num(r.get('누계'))} / 소진율 {fmt_num(r.get('소진율_pct'))}%"
+            f"{r.get('선명')}\n"
+            f"할당량: {fmt_num(r.get('할당량'))} kg\n"
+            f"금주소진량: {fmt_num(r.get('금주소진량'))} kg\n"
+            f"누계: {fmt_num(r.get('누계'))} kg\n"
+            f"잔량: {fmt_num(r.get('잔량'))} kg\n"
+            f"소진율: {fmt_num(r.get('소진율_pct'))}%\n"
         )
-    return "\n".join(lines)
+    return "\n".join(lines).strip()
 
-def render_catch_timeseries(fish_norm, industry, port, ts, mode="weekly"):
+def render_weekly_vessel_catch(fish_norm, industry, port, rows, ref_date=None):
+    if not ref_date:
+        ref_date = datetime.now(KST)
+    sat, fri, m, week_idx, y = week_range_and_index_for(ref_date)
+    period_line = fmt_period_line(sat, fri)
     disp = display_name(fish_norm)
-    if not ts:
-        title = "주간별 어획량" if mode == "weekly" else "전체기간 어획량"
-        return f"📅 {disp} {industry} — {port} {title}\n\n데이터 준비중입니다."
-    if mode == "weekly":
-        lines = [f"📅 {disp} {industry} — {port} 주간별 어획량", ""]
-        for row in ts.get("weekly", [])[:12]:
-            wk = row.get("week_ending"); val = row.get("오징어")
-            if val is not None: lines.append(f"- {wk}: {fmt_num(val)} kg")
-        return "\n".join(lines) if len(lines) > 2 else f"📅 {disp} {industry} — {port} 주간별 어획량\n\n데이터가 없습니다."
-    else:
-        total = ts.get("season_total", {})
-        if not total:
-            return f"🗂 {disp} {industry} — {port} 전체기간 어획량\n\n데이터가 없습니다."
-        lines = [f"🗂 {disp} {industry} — {port} 전체기간 어획량", ""]
-        for sp, v in total.items():
-            lines.append(f"- {sp}: {fmt_num(v)} kg")
-        return "\n".join(lines)
+
+    if not rows:
+        return f"📅 {disp} {industry} — {port} 주간별 어획량\n{period_line}\n\n데이터 준비중입니다."
+
+    lines = [
+        f"📅 {disp} {industry} — {port} 주간별 어획량",
+        period_line,
+        "",
+    ]
+    for r in rows:
+        lines.append(
+            f"{r.get('선명')}\n"
+            f"주어종 어획량: {fmt_num(r.get('주어종어획량'))} kg\n"
+            f"부수어획 어획량: {fmt_num(r.get('부수어획어획량'))} kg\n"
+        )
+    return "\n".join(lines).strip()
+
+def render_season_vessel_catch(fish_norm, industry, port, rows, ref_date=None):
+    if not ref_date:
+        ref_date = datetime.now(KST)
+    sat, fri, m, week_idx, y = week_range_and_index_for(ref_date)
+    label = season_label_from_year(y)
+    disp = display_name(fish_norm)
+
+    if not rows:
+        return f"🗂 {disp} {industry} — {port} 전체기간 어획량\n{label}\n\n데이터 준비중입니다."
+
+    lines = [
+        f"🗂 {disp} {industry} — {port} 전체기간 어획량",
+        label,
+        "",
+    ]
+    for r in rows:
+        lines.append(
+            f"{r.get('선명')}\n"
+            f"주어종 어획량: {fmt_num(r.get('주어종어획량'))} kg\n"
+            f"부수어획 어획량: {fmt_num(r.get('부수어획어획량'))} kg\n"
+        )
+    return "\n".join(lines).strip()
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 도움말/금어기
+# 도움말
 # ──────────────────────────────────────────────────────────────────────────────
 HELP_TEXT = (
     "🧭 사용 방법\n"
@@ -373,22 +441,25 @@ def fishbot():
         if trip:
             fish_norm, industry, port = trip
             intent = parse_detail_intent(user_text)
+
             if intent == "depletion":
                 rows = get_depletion_rows(fish_norm, industry, port)
-                text = render_depletion_summary(fish_norm, industry, port, rows)
-                return jsonify(build_response(text, buttons=build_port_detail_buttons(fish_norm, industry, port)))
-            if intent == "weekly_ts":
-                ts = get_catch_timeseries(fish_norm, industry, port)
-                text = render_catch_timeseries(fish_norm, industry, port, ts, mode="weekly")
-                return jsonify(build_response(text, buttons=build_port_detail_buttons(fish_norm, industry, port)))
-            if intent == "season_total":
-                ts = get_catch_timeseries(fish_norm, industry, port)
-                text = render_catch_timeseries(fish_norm, industry, port, ts, mode="season")
+                text = render_depletion_summary(fish_norm, industry, port, rows, ref_date=today)
                 return jsonify(build_response(text, buttons=build_port_detail_buttons(fish_norm, industry, port)))
 
-            # 기본: 주간보고
+            if intent == "weekly_ts":
+                rows = get_weekly_vessel_catch(fish_norm, industry, port)
+                text = render_weekly_vessel_catch(fish_norm, industry, port, rows, ref_date=today)
+                return jsonify(build_response(text, buttons=build_port_detail_buttons(fish_norm, industry, port)))
+
+            if intent == "season_total":
+                rows = get_season_vessel_catch(fish_norm, industry, port)
+                text = render_season_vessel_catch(fish_norm, industry, port, rows, ref_date=today)
+                return jsonify(build_response(text, buttons=build_port_detail_buttons(fish_norm, industry, port)))
+
+            # 기본: 주간보고(제목: n월 n주차 주간보고 + 기간 토~금)
             data = get_weekly_report(fish_norm, industry, port)
-            text = render_weekly_report(fish_norm, industry, port, data)
+            text = render_weekly_report(fish_norm, industry, port, data, ref_date=today)
             return jsonify(build_response(text, buttons=build_port_detail_buttons(fish_norm, industry, port)))
 
         # <어종> <업종> → 선적지 목록
@@ -416,8 +487,8 @@ def fishbot():
         fish_norm = normalize_fish_name(user_text)
         if fish_norm in fish_data:
             text, _ = get_fish_info(fish_norm, fish_data)
-            tac_btns = build_tac_entry_button_for(fish_norm)  # resolve_tac_key 내부 적용
-            return jsonify(build_response(text, buttons=tac_btns))  # 기본 메뉴 붙이지 않음
+            tac_btns = build_tac_entry_button_for(fish_norm)  # 기본 메뉴는 붙이지 않음
+            return jsonify(build_response(text, buttons=tac_btns))
 
         # 폴백
         return jsonify(build_response("제가 할 수 있는 일이 아니에요.", buttons=BASE_MENU))
@@ -435,6 +506,7 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     # 프로덕션 권장: gunicorn -w 4 -k gthread -b 0.0.0.0:$PORT app:app
     app.run(host="0.0.0.0", port=port)
+
 
 
 

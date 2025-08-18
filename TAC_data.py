@@ -56,4 +56,3 @@ def all_ports_union() -> List[str]:
         for ind in sp.get("industries", {}).values():
             s.update(ind.get("ports", []))
     return sorted(s)
-
