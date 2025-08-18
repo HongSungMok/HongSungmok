@@ -201,8 +201,19 @@ def parse_tac_dual(text: str):
     return None
 
 def parse_tac_triplet(text: str):
-    if not text: return None
+    if not text:
+        return None
     t = text.strip()
+
+    # 먼저 의도 키워드 제거
+    intent = parse_detail_intent(t)
+    if intent:
+        # 의도 키워드 빼고 앞부분만 남김
+        for suffix in ["소진현황", "주간별 어획량", "전체기간 어획량"]:
+            if t.endswith(suffix):
+                t = t[: -len(suffix)].strip()
+                break
+
     for port in sorted(all_ports_union(), key=len, reverse=True):
         if t.endswith(port):
             left = t[:-len(port)].strip()
