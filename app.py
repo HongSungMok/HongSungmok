@@ -412,7 +412,7 @@ def message():
     # 5) 일반 어종 정보
     fish_norm = normalize_fish_name(user_text)
     if fish_norm in fish_data:
-        info = get_fish_info(fish_norm, fish_data)   # ✅ 수정 완료
+        info = get_fish_info(fish_norm)   # ✅ 수정된 부분
         text = f"{get_emoji(fish_norm)} {display_name(fish_norm)} {get_emoji(fish_norm)}\n\n{info}"
         return jsonify(build_response(text, buttons=BASE_MENU+build_tac_entry_button_for(fish_norm)))
 
