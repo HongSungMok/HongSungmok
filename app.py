@@ -387,7 +387,7 @@ def fishbot():
         if "도움말" in user_text:
             return jsonify(build_response(HELP_TEXT, buttons=BASE_MENU))
 
-        # 오늘 금어기
+        # 오늘 금어기 (버튼 유지)
         if is_today_ban_query(user_text):
             fishes = today_banned_fishes_cached(today.month, today.day)
             if not fishes:
@@ -397,7 +397,7 @@ def fishbot():
             buttons = [{"label": display_name(n), "action":"message", "messageText": display_name(n)} for n in fishes[:MAX_QR]]
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
-        # 월 금어기
+        # 월 금어기 (버튼 유지)
         m = extract_month_query(user_text)
         if m is not None:
             result = []
@@ -460,11 +460,12 @@ def fishbot():
             else:
                 return jsonify(build_response(f"'{display_name(tac_target)}' TAC 업종 정보가 없습니다.", buttons=BASE_MENU))
 
-        # ④ 특정 어종 상세 (※ BASE_MENU 제거)
+        # ④ 특정 어종 상세 (※ BASE_MENU 제거, TAC 버튼만 필요 시 노출)
         fish_norm = normalize_fish_name(user_text)
         if fish_norm in fish_data:
-            text, _btns_ignored = get_fish_info(fish_norm)  # fish_utils는 (text, buttons) 반환
-            tac_btns = build_tac_entry_button_for(fish_norm)  # 필요 시 TAC 탐색 버튼만 노출
+            # ⚠️ 함수 시그니처: get_fish_info(fish_name: str, fish_data: dict)
+            text, _btns_ignored = get_fish_info(fish_norm, fish_data)
+            tac_btns = build_tac_entry_button_for(fish_norm)  # 필요 시만 노출
             return jsonify(build_response(text, buttons=(tac_btns or None)))
 
         # 폴백
@@ -483,6 +484,7 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     # 프로덕션 권장: gunicorn -w 4 -k gthread -b 0.0.0.0:$PORT app:app
     app.run(host="0.0.0.0", port=port)
+
 
 
 
