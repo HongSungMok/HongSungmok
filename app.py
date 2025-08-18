@@ -120,23 +120,27 @@ def fmt_num(v):
 # ──────────────────────────────────────────────────────────────────────────────
 from TAC_data import get_aliases as tac_aliases
 def resolve_tac_key(fish_norm: str):
+    # 1. 정확히 일치
     if is_tac_species(fish_norm):
         return fish_norm
+    # 2. display / alias 포함 체크
     for sp, meta in TAC_DATA.items():
-        disp = meta.get("display")
-        aliases = set(meta.get("aliases", []))
-        if fish_norm == sp or fish_norm == disp or fish_norm in aliases:
+        if fish_norm == sp:
+            return sp
+        if fish_norm == meta.get("display"):
+            return sp
+        if fish_norm in meta.get("aliases", []):
             return sp
     return None
 
 def display_name(fish_norm: str) -> str:
     sp = resolve_tac_key(fish_norm)
-    if sp: return tac_display(sp)
+    if sp:
+        return tac_display(sp)
     return display_name_map.get(fish_norm, fish_norm)
 
 def get_emoji(name: str) -> str:
     return fish_emojis.get(name, "🐟")
-
 # ──────────────────────────────────────────────────────────────────────────────
 # TAC 버튼/파서
 # ──────────────────────────────────────────────────────────────────────────────
@@ -315,51 +319,59 @@ def render_weekly_report(fish_norm, industry, port, data, ref_date=None):
 def render_depletion_summary(fish_norm, industry, port, rows, ref_date=None, top_n=8):
     if not ref_date:
         ref_date = datetime.now(KST)
-    sat, fri, m, week_idx, y = week_range_and_index_for(ref_date)
-    period_line = fmt_period_line(sat, fri)
+    sat, fri = ref_date.date(), ref_date.date()
     disp = display_name(fish_norm)
 
     if not rows:
-        return f"📈 {disp} {industry} — {port} 소진현황\n{period_line}\n\n데이터 준비중입니다."
+        return f"📈 {disp} {industry} — {port} 소진현황\n\n데이터 준비중입니다."
 
     lines = [
         f"📈 {disp} {industry} — {port} 소진현황",
-        period_line,
         "",
     ]
     for r in rows[:top_n]:
         lines.append(
-            f"{r.get('선명')}\n"
-            f"할당량: {fmt_num(r.get('할당량'))} kg\n"
-            f"금주소진량: {fmt_num(r.get('금주소진량'))} kg\n"
-            f"누계: {fmt_num(r.get('누계'))} kg\n"
-            f"잔량: {fmt_num(r.get('잔량'))} kg\n"
-            f"소진율: {fmt_num(r.get('소진율_pct'))}%\n"
+            f"🚢 {r.get('선명')}\n"
+            f"• 할당량: {fmt_num(r.get('할당량'))} kg\n"
+            f"• 금주소진량: {fmt_num(r.get('금주소진량'))} kg\n"
+            f"• 누계: {fmt_num(r.get('누계'))} kg\n"
+            f"• 잔량: {fmt_num(r.get('잔량'))} kg\n"
+            f"• 소진율: {fmt_num(r.get('소진율_pct'))}%\n"
         )
     return "\n".join(lines).strip()
 
 def render_weekly_vessel_catch(fish_norm, industry, port, rows, ref_date=None):
-    if not ref_date:
-        ref_date = datetime.now(KST)
-    sat, fri, m, week_idx, y = week_range_and_index_for(ref_date)
-    period_line = fmt_period_line(sat, fri)
-    disp = display_name(fish_norm)
-
     if not rows:
-        return f"📅 {disp} {industry} — {port} 주간별 어획량\n{period_line}\n\n데이터 준비중입니다."
+        return f"📅 {display_name(fish_norm)} {industry} — {port} 주간별 어획량\n\n데이터 준비중입니다."
 
     lines = [
-        f"📅 {disp} {industry} — {port} 주간별 어획량",
-        period_line,
+        f"📅 {display_name(fish_norm)} {industry} — {port} 주간별 어획량",
         "",
     ]
     for r in rows:
         lines.append(
-            f"{r.get('선명')}\n"
-            f"주어종 어획량: {fmt_num(r.get('주어종어획량'))} kg\n"
-            f"부수어획 어획량: {fmt_num(r.get('부수어획어획량'))} kg\n"
+            f"🚢 {r.get('선명')}\n"
+            f"• 주어종 어획량: {fmt_num(r.get('주어종어획량'))} kg\n"
+            f"• 부수어획 어획량: {fmt_num(r.get('부수어획어획량'))} kg\n"
         )
     return "\n".join(lines).strip()
+
+def render_season_vessel_catch(fish_norm, industry, port, rows, ref_date=None):
+    if not rows:
+        return f"🗂 {display_name(fish_norm)} {industry} — {port} 전체기간 어획량\n\n데이터 준비중입니다."
+
+    lines = [
+        f"🗂 {display_name(fish_norm)} {industry} — {port} 전체기간 어획량",
+        "",
+    ]
+    for r in rows:
+        lines.append(
+            f"🚢 {r.get('선명')}\n"
+            f"• 주어종 어획량: {fmt_num(r.get('주어종어획량'))} kg\n"
+            f"• 부수어획 어획량: {fmt_num(r.get('부수어획어획량'))} kg\n"
+        )
+    return "\n".join(lines).strip()
+
 
 def render_season_vessel_catch(fish_norm, industry, port, rows, ref_date=None):
     if not ref_date:
