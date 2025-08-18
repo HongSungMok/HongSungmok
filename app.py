@@ -109,26 +109,42 @@ def is_tac_list_request(text: str):
         return None
     return normalize_fish_name(target)
 
-def _clean_text(s: str) -> str:
-    return _PUNCT_RE.sub("", _CLEAN_RE.sub("", (s or "").strip()))
+# ──────────────────────────────────────────────────────────────────────────────
+# 매칭 유틸 (느슨 매칭)
+# ──────────────────────────────────────────────────────────────────────────────
+def _normalize_for_match(s: str) -> str:
+    # 흔한 접두 안내 문구/기호/공백 제거하여 비교 안정화
+    s = (s or "").strip()
+    s = re.sub(r"(업종|선택|선택됨|카테고리)\s*[:\-]?\s*", "", s)
+    s = re.sub(r"\s+", "", s)                 # 공백 제거
+    s = re.sub(r"[^0-9A-Za-z가-힣]", "", s)    # 기호 제거
+    return s
 
 def is_industry_select(text: str):
-    """업종 버튼/텍스트 선택 여부 판단 (느슨한 매칭 허용)"""
+    """업종 버튼/텍스트 선택 여부 판단 (느슨 매칭 + 접두어/기호 제거)"""
     if not text:
         return None
-    t = (text or "").strip()
+    t_raw = (text or "").strip()
 
-    # 완전 일치 먼저
-    if t in INDUSTRY_PORTS:
-        return t
+    # 1) 완전 일치
+    if t_raw in INDUSTRY_PORTS:
+        return t_raw
 
-    # 공백/구두점 제거 후 비교
-    t_clean = _clean_text(t)
+    # 2) 느슨 일치 (정규화 후 비교)
+    t_norm = _normalize_for_match(t_raw)
     for key in INDUSTRY_PORTS.keys():
-        key_clean = _clean_text(key)
-        if t_clean == key_clean:
+        if t_norm == _normalize_for_match(key):
             return key
+
+    # 3) 포함형(안내 문구 안에 들어간 경우)
+    for key in INDUSTRY_PORTS.keys():
+        if _normalize_for_match(key) in t_norm:
+            return key
+
     return None
+
+def _clean_text(s: str) -> str:
+    return _PUNCT_RE.sub("", _CLEAN_RE.sub("", (s or "").strip()))
 
 def is_port_select(text: str):
     """선적지 버튼 선택 여부 판단 (느슨 매칭)"""
@@ -373,19 +389,21 @@ def fishbot():
         selected_industry = is_industry_select(user_text)
         if selected_industry:
             ports = INDUSTRY_PORTS.get(selected_industry, [])
-            lines = [
-                "🧭 선적지 선택",
-                f"업종: {selected_industry}",
-                ""
-            ]
             if ports:
-                lines.extend(ports)
-                lines.append("")
-                lines.append("자세한 내용은 버튼을 눌러주십시오.")
+                lines = [
+                    "⛱️ 선적지 목록 ⛱️",
+                    "",
+                    *ports,
+                    "",
+                    "아래 버튼을 눌러주세요."
+                ]
+                port_buttons = [{"label": p, "action": "message", "messageText": p} for p in ports[:MAX_QR]]
+                return jsonify(build_response("\n".join(lines), buttons=merge_buttons(port_buttons)))
             else:
-                lines.append("등록된 선적지가 없습니다.")
-            port_buttons = [{"label": p, "action": "message", "messageText": p} for p in ports[:MAX_QR]]
-            return jsonify(build_response("\n".join(lines), buttons=merge_buttons(port_buttons)))
+                return jsonify(build_response(
+                    "⛱️ 선적지 목록 ⛱️\n\n등록된 선적지가 없습니다.",
+                    buttons=BASE_MENU
+                ))
 
         # 2.7) 선적지 선택 (임시 응답: 추후 조업량/소진률 연동 지점)
         selected_port = is_port_select(user_text)
