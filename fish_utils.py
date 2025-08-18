@@ -56,6 +56,7 @@ fish_name_aliases = {
 }
 
 def clean_input(text: str) -> str:
+    """사용자 입력에서 불필요 단어 제거"""
     noise_keywords = [
         "금어기", "금지체장", "금지체중", "체장", "체중", "크기", "사이즈",
         "정보", "알려줘", "좀", "요", "?", ".", " "
@@ -66,6 +67,7 @@ def clean_input(text: str) -> str:
     return text.strip()
 
 def normalize_fish_name(user_input: str) -> str:
+    """사용자 입력을 정규화된 어종명으로 변환"""
     cleaned = clean_input(user_input)
     for alias in sorted(fish_name_aliases.keys(), key=len, reverse=True):
         if alias in cleaned:
@@ -73,6 +75,7 @@ def normalize_fish_name(user_input: str) -> str:
     return cleaned
 
 def convert_period_format(period: str) -> str:
+    """금어기 기간을 'MM월DD일 ~ MM월DD일' 형식으로 변환"""
     try:
         if not period or "~" not in period:
             return "없음"
@@ -91,7 +94,8 @@ def convert_period_format(period: str) -> str:
         logger.warning(f"[convert_period_format] {period} 변환 오류: {e}")
         return period
 
-def get_fish_info(fish_name: str, fish_data: dict):
+def get_fish_info(fish_name: str):
+    """특정 어종의 금어기·금지체장 정보 반환"""
     fish = fish_data.get(fish_name)
     display_name = fish_name
 
@@ -131,7 +135,7 @@ def get_fish_info(fish_name: str, fish_data: dict):
     main_ban = convert_period_format(fish.get("금어기"))
     body += f"전국: {main_ban}\n"
 
-    # 기타 금어기: 보조/지역별
+    # 기타 금어기 (업종별/지역별)
     for k, v in fish.items():
         if k.endswith("_금어기") and k != "금어기":
             label = k.replace("_금어기", "").replace("_", " ")
@@ -139,7 +143,7 @@ def get_fish_info(fish_name: str, fish_data: dict):
             body += f"{label}: {formatted}\n"
     body += "\n"
 
-    # 📏 금지체장 or 체중
+    # 📏 금지체장/체중
     size_type = "📏 금지체장" if "금지체장" in fish else ("⚖️ 금지체중" if "금지체중" in fish else "📏 금지체장")
     total_size = fish.get("금지체장") or fish.get("금지체중") or "없음"
     body += f"{size_type}\n전국: {total_size}\n"
@@ -159,6 +163,7 @@ def get_fish_info(fish_name: str, fish_data: dict):
     return header + body.strip(), []
 
 def get_fishes_in_seasonal_ban(fish_data: dict, target_date: datetime = None):
+    """특정 날짜 기준 금어기 중인 어종 리스트 반환"""
     if target_date is None:
         target_date = datetime.today()
     
@@ -183,10 +188,9 @@ def get_fishes_in_seasonal_ban(fish_data: dict, target_date: datetime = None):
                 in_range = (sm, sd) <= md <= (em, ed)
 
             if in_range:
-                # 어종 이름을 정규화하고 중복 방지
                 norm = fish_name_aliases.get(name, name)
                 if norm not in seen:
-                    matched.append(name)  # 원본 이름 그대로 반환
+                    matched.append(name)
                     seen.add(norm)
 
         except Exception as e:
