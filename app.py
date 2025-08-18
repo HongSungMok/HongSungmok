@@ -47,7 +47,7 @@ fish_emojis = {
     "대게": "🦀", "붉은대게": "🦀", "꽃게": "🦀",
     "오분자기": "🐚", "키조개": "🦪", "제주소라": "🐚",
     "주꾸미": "🐙", "대문어": "🐙", "참문어": "🐙",
-    "낙지": "🦑", "살오징어(오징어)": "🦑",
+    "낙지": "🦑", "살오징어": "🦑",
     "해삼": "🌊", "넓미역": "🌿", "우뭇가사리": "🌿", "톳": "🌿",
 }
 
@@ -63,38 +63,24 @@ _PUNCT_RE = re.compile(r"[~!@#\$%\^&\*\(\)\-\_\+\=\[\]\{\}\|\\;:'\",\.<>\/\?·�
 _MONTH_END = {m: calendar.monthrange(2024, m)[1] for m in range(1, 13)}
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 주차/기간 유틸 (요청 규칙)
-#  - 기간: 항상 토요일 ~ 금요일
-#  - 주차 기준: 그 주의 '목요일'이 속한 월의 n주차
-#  - 제목 아래 기간 표기: (YYYY.MM.DD~MM.DD)
+# 주차/기간 유틸
 # ──────────────────────────────────────────────────────────────────────────────
 def week_range_and_index_for(date: datetime):
-    """
-    주어진 날짜가 포함된 '토~금' 주간의 범위와
-    그 주의 목요일 기준 (월, n주차, 해당 목요일의 연도)를 계산.
-    """
-    # 해당 주의 토요일
-    # Python weekday: Mon=0 ... Sun=6, Sat=5
     delta_to_sat = (date.weekday() - 5) % 7
     sat = (date - timedelta(days=delta_to_sat)).date()
     fri = sat + timedelta(days=6)
-    thu = sat + timedelta(days=5)  # 토(0)~목(5)
-
-    # '목요일'이 속한 달의 첫 '목요일'
+    thu = sat + timedelta(days=5)
     first_day = thu.replace(day=1)
     first_thu = first_day
     while first_thu.weekday() != 3:  # Thu=3
         first_thu += timedelta(days=1)
-    # n주차 계산
     week_idx = 1 + (thu - first_thu).days // 7
     return sat, fri, thu.month, week_idx, thu.year
 
 def fmt_period_line(sat, fri):
-    # 예: (2025.08.09~08.15)
     return f"({sat.strftime('%Y.%m.%d')}~{fri.strftime('%m.%d')})"
 
 def season_label_from_year(y: int):
-    # 예: (25~26년 어기)
     a = y % 100
     b = (y + 1) % 100
     return f"({a:02d}~{b:02d}년 어기)"
@@ -120,10 +106,8 @@ def fmt_num(v):
 # ──────────────────────────────────────────────────────────────────────────────
 from TAC_data import get_aliases as tac_aliases
 def resolve_tac_key(fish_norm: str):
-    # 1. 정확히 일치
     if is_tac_species(fish_norm):
         return fish_norm
-    # 2. display / alias 포함 체크
     for sp, meta in TAC_DATA.items():
         if fish_norm == sp:
             return sp
@@ -135,12 +119,12 @@ def resolve_tac_key(fish_norm: str):
 
 def display_name(fish_norm: str) -> str:
     sp = resolve_tac_key(fish_norm)
-    if sp:
-        return tac_display(sp)
+    if sp: return tac_display(sp)
     return display_name_map.get(fish_norm, fish_norm)
 
 def get_emoji(name: str) -> str:
     return fish_emojis.get(name, "🐟")
+
 # ──────────────────────────────────────────────────────────────────────────────
 # TAC 버튼/파서
 # ──────────────────────────────────────────────────────────────────────────────
@@ -264,71 +248,14 @@ def today_banned_fishes_cached(month: int, day: int):
         except Exception: pass
     return banned
 
-def build_fish_buttons(fishes):
-    return [{"label": display_name(n), "action": "message", "messageText": display_name(n)} for n in fishes[:MAX_QR]]
-
-def is_today_ban_query(text: str) -> bool:
-    if not text: return False
-    t = _PUNCT_RE.sub("", _CLEAN_RE.sub("", text.strip())).replace("의","")
-    return any(tok in t for tok in INTENT_TIME_TOKENS) and ("금어기" in t)
-
-def extract_month_query(text: str):
-    if not text: return None
-    m1 = re.search(r"(\d{1,2})\s*월.*금어기", text)
-    m2 = re.search(r"금어기.*?(\d{1,2})\s*월", text)
-    m = m1 or m2
-    if not m: return None
-    try:
-        month = int(m.group(1))
-        if 1 <= month <= 12: return month
-    except: pass
-    return None
-
 # ──────────────────────────────────────────────────────────────────────────────
-# 렌더러 (요청 포맷 반영)
+# 렌더러
 # ──────────────────────────────────────────────────────────────────────────────
-def render_weekly_report(fish_norm, industry, port, data, ref_date=None):
-    if not ref_date:
-        ref_date = datetime.now(KST)
-    sat, fri, m, week_idx, y = week_range_and_index_for(ref_date)
-    period_line = fmt_period_line(sat, fri)
-
-    if not data:
-        return f"📊 {m}월 {week_idx}주차 주간보고\n{period_line}\n\n데이터 준비중입니다."
-
-    lines = [
-        f"📊 {m}월 {week_idx}주차 주간보고",
-        period_line,
-        "",
-        f"• 배정량: {fmt_num(data.get('배정량'))} kg",
-        f"• 배분량: {fmt_num(data.get('배분량'))} kg",
-        f"• 금주 포획량: {fmt_num(data.get('금주포획량'))} kg",
-        f"• 누계: {fmt_num(data.get('누계'))} kg",
-        f"• 배분량 소진율: {fmt_num(data.get('배분량소진율'))}%",
-    ]
-    if data.get("조업척수") is not None and data.get("총척수") is not None:
-        lines.append(f"• 조업척수: {fmt_num(data.get('조업척수'))}척 (총 {fmt_num(data.get('총척수'))}척)")
-    if data.get("총배분량소진율") is not None:
-        lines.append(f"• 총 배분량 소진율: {fmt_num(data.get('총배분량소진율'))}%")
-    if data.get("지난주누계량") is not None:
-        lines.append(f"• 지난주 누계량: {fmt_num(data.get('지난주누계량'))} kg")
-    if data.get("누락량") is not None:
-        lines.append(f"• 누락량: {fmt_num(data.get('누락량'))} kg")
-    return "\n".join(lines)
-
 def render_depletion_summary(fish_norm, industry, port, rows, ref_date=None, top_n=8):
-    if not ref_date:
-        ref_date = datetime.now(KST)
-    sat, fri = ref_date.date(), ref_date.date()
     disp = display_name(fish_norm)
-
     if not rows:
         return f"📈 {disp} {industry} — {port} 소진현황\n\n데이터 준비중입니다."
-
-    lines = [
-        f"📈 {disp} {industry} — {port} 소진현황",
-        "",
-    ]
+    lines = [f"📈 {disp} {industry} — {port} 소진현황", ""]
     for r in rows[:top_n]:
         lines.append(
             f"🚢 {r.get('선명')}\n"
@@ -341,13 +268,10 @@ def render_depletion_summary(fish_norm, industry, port, rows, ref_date=None, top
     return "\n".join(lines).strip()
 
 def render_weekly_vessel_catch(fish_norm, industry, port, rows, ref_date=None):
+    disp = display_name(fish_norm)
     if not rows:
-        return f"📅 {display_name(fish_norm)} {industry} — {port} 주간별 어획량\n\n데이터 준비중입니다."
-
-    lines = [
-        f"📅 {display_name(fish_norm)} {industry} — {port} 주간별 어획량",
-        "",
-    ]
+        return f"📅 {disp} {industry} — {port} 주간별 어획량\n\n데이터 준비중입니다."
+    lines = [f"📅 {disp} {industry} — {port} 주간별 어획량", ""]
     for r in rows:
         lines.append(
             f"🚢 {r.get('선명')}\n"
@@ -355,44 +279,20 @@ def render_weekly_vessel_catch(fish_norm, industry, port, rows, ref_date=None):
             f"• 부수어획 어획량: {fmt_num(r.get('부수어획어획량'))} kg\n"
         )
     return "\n".join(lines).strip()
-
-def render_season_vessel_catch(fish_norm, industry, port, rows, ref_date=None):
-    if not rows:
-        return f"🗂 {display_name(fish_norm)} {industry} — {port} 전체기간 어획량\n\n데이터 준비중입니다."
-
-    lines = [
-        f"🗂 {display_name(fish_norm)} {industry} — {port} 전체기간 어획량",
-        "",
-    ]
-    for r in rows:
-        lines.append(
-            f"🚢 {r.get('선명')}\n"
-            f"• 주어종 어획량: {fmt_num(r.get('주어종어획량'))} kg\n"
-            f"• 부수어획 어획량: {fmt_num(r.get('부수어획어획량'))} kg\n"
-        )
-    return "\n".join(lines).strip()
-
 
 def render_season_vessel_catch(fish_norm, industry, port, rows, ref_date=None):
     if not ref_date:
         ref_date = datetime.now(KST)
-    sat, fri, m, week_idx, y = week_range_and_index_for(ref_date)
-    label = season_label_from_year(y)
+    label = season_label_from_year(ref_date.year)
     disp = display_name(fish_norm)
-
     if not rows:
         return f"🗂 {disp} {industry} — {port} 전체기간 어획량\n{label}\n\n데이터 준비중입니다."
-
-    lines = [
-        f"🗂 {disp} {industry} — {port} 전체기간 어획량",
-        label,
-        "",
-    ]
+    lines = [f"🗂 {disp} {industry} — {port} 전체기간 어획량", label, ""]
     for r in rows:
         lines.append(
-            f"{r.get('선명')}\n"
-            f"주어종 어획량: {fmt_num(r.get('주어종어획량'))} kg\n"
-            f"부수어획 어획량: {fmt_num(r.get('부수어획어획량'))} kg\n"
+            f"🚢 {r.get('선명')}\n"
+            f"• 주어종 어획량: {fmt_num(r.get('주어종어획량'))} kg\n"
+            f"• 부수어획 어획량: {fmt_num(r.get('부수어획어획량'))} kg\n"
         )
     return "\n".join(lines).strip()
 
@@ -428,8 +328,7 @@ def fishbot():
                 return jsonify(build_response(f"📅 오늘({today.month}월 {today.day}일) 금어기 어종은 없습니다.", buttons=BASE_MENU))
             lines = [f"📅 오늘({today.month}월 {today.day}일) 금어기 어종:"]
             lines += [f"- {get_emoji(n)} {display_name(n)}" for n in fishes]
-            buttons = [{"label": display_name(n), "action":"message", "messageText": display_name(n)} for n in fishes[:MAX_QR]]
-            return jsonify(build_response("\n".join(lines), buttons=buttons))
+            return jsonify(build_response("\n".join(lines), buttons=build_fish_buttons(fishes)))
 
         # 월 금어기
         m = extract_month_query(user_text)
@@ -444,79 +343,66 @@ def fishbot():
                 return jsonify(build_response(f"📅 {m}월 금어기 어종은 없습니다.", buttons=BASE_MENU))
             lines = [f"📅 {m}월 금어기 어종:"]
             lines += [f"- {get_emoji(n)} {display_name(n)}" for n in result]
-            buttons = [{"label": display_name(n), "action":"message", "messageText": display_name(n)} for n in result[:MAX_QR]]
-            return jsonify(build_response("\n".join(lines), buttons=buttons))
+            return jsonify(build_response("\n".join(lines), buttons=build_fish_buttons(result)))
 
-        # ── 구체적 입력 우선 ──────────────────────────────────────────────────
-        # <어종> <업종> <선적지> (+세부 의도)
+        # ── 구체적 입력 ───────────────────────────
         trip = parse_tac_triplet(user_text)
         if trip:
             fish_norm, industry, port = trip
             intent = parse_detail_intent(user_text)
-
             if intent == "depletion":
                 rows = get_depletion_rows(fish_norm, industry, port)
-                text = render_depletion_summary(fish_norm, industry, port, rows, ref_date=today)
-                return jsonify(build_response(text, buttons=build_port_detail_buttons(fish_norm, industry, port)))
-
+                return jsonify(build_response(render_depletion_summary(fish_norm, industry, port, rows), buttons=build_port_detail_buttons(fish_norm, industry, port)))
             if intent == "weekly_ts":
                 rows = get_weekly_vessel_catch(fish_norm, industry, port)
-                text = render_weekly_vessel_catch(fish_norm, industry, port, rows, ref_date=today)
-                return jsonify(build_response(text, buttons=build_port_detail_buttons(fish_norm, industry, port)))
-
+                return jsonify(build_response(render_weekly_vessel_catch(fish_norm, industry, port, rows), buttons=build_port_detail_buttons(fish_norm, industry, port)))
             if intent == "season_total":
                 rows = get_season_vessel_catch(fish_norm, industry, port)
-                text = render_season_vessel_catch(fish_norm, industry, port, rows, ref_date=today)
-                return jsonify(build_response(text, buttons=build_port_detail_buttons(fish_norm, industry, port)))
+                return jsonify(build_response(render_season_vessel_catch(fish_norm, industry, port, rows), buttons=build_port_detail_buttons(fish_norm, industry, port)))
+            # 단순 triplet만 입력 → 세부 버튼 보여주기
+            return jsonify(build_response(f"🚢 {display_name(fish_norm)} {industry} — {port}", buttons=build_port_detail_buttons(fish_norm, industry, port)))
 
-            # 기본: 주간보고(제목: n월 n주차 주간보고 + 기간 토~금)
-            data = get_weekly_report(fish_norm, industry, port)
-            text = render_weekly_report(fish_norm, industry, port, data, ref_date=today)
-            return jsonify(build_response(text, buttons=build_port_detail_buttons(fish_norm, industry, port)))
-
-        # <어종> <업종> → 선적지 목록
         duo = parse_tac_dual(user_text)
         if duo:
             fish_norm, industry = duo
-            ports = get_ports(fish_norm, industry)
-            lines = [f"⛱️ {display_name(fish_norm)} {industry} 선적지 ⛱️", ""]
-            lines += ports + ["", "아래 버튼을 눌러주세요."]
-            return jsonify(build_response("\n".join(lines), buttons=build_port_buttons(fish_norm, industry)))
+            return jsonify(build_response(f"🚢 {display_name(fish_norm)} {industry} 선적지 목록", buttons=build_port_buttons(fish_norm, industry)))
 
-        # TAC <어종> → 업종 목록
-        tac_target = is_tac_list_request(user_text)
-        if tac_target:
-            sp = resolve_tac_key(tac_target)
-            if sp:
-                inds = get_industries(sp)
-                lines = [f"🚢 {display_name(sp)} TAC 업종 🚢", ""]
-                lines += inds + ["", "자세한 내용은 버튼을 눌러주십시오."]
-                return jsonify(build_response("\n".join(lines), buttons=build_tac_industry_buttons(sp)))
-            else:
-                return jsonify(build_response(f"'{display_name(tac_target)}' TAC 업종 정보가 없습니다.", buttons=BASE_MENU))
+        tac_fish = is_tac_list_request(user_text)
+        if tac_fish:
+            return jsonify(build_response(f"🚢 {display_name(tac_fish)} TAC 업종", buttons=build_tac_industry_buttons(tac_fish)))
 
-        # 특정 어종 상세
+        # 기본: 어종 규제 안내
         fish_norm = normalize_fish_name(user_text)
         if fish_norm in fish_data:
-            text, _ = get_fish_info(fish_norm, fish_data)
-            tac_btns = build_tac_entry_button_for(fish_norm)  # 기본 메뉴는 붙이지 않음
-            return jsonify(build_response(text, buttons=tac_btns))
+            info = get_fish_info(fish_norm)
+            text = f"{get_emoji(fish_norm)} {display_name(fish_norm)} {get_emoji(fish_norm)}\n\n" + info
+            return jsonify(build_response(text, buttons=BASE_MENU + build_tac_entry_button_for(fish_norm)))
 
-        # 폴백
-        return jsonify(build_response("제가 할 수 있는 일이 아니에요.", buttons=BASE_MENU))
+        return jsonify(build_response("제가 할 수 있는 일이 아니에요. '도움말'을 입력해 보세요.", buttons=BASE_MENU))
 
-    except Exception as e:
-        logger.error(f"[ERROR] fishbot error: {e}", exc_info=True)
-        return jsonify(build_response("⚠️ 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", buttons=BASE_MENU))
+    except Exception as ex:
+        logger.exception("오류 발생")
+        return jsonify(build_response(f"⚠️ 오류 발생: {ex}", buttons=BASE_MENU))
 
-# 헬스체크
-@app.route("/healthz", methods=["GET"])
-def healthz():
-    return "ok", 200
+# ──────────────────────────────────────────────────────────────────────────────
+# 보조 함수
+# ──────────────────────────────────────────────────────────────────────────────
+def is_today_ban_query(text):
+    t = text.strip()
+    return "오늘" in t and "금어기" in t
+
+def extract_month_query(text):
+    m = re.search(r"(\d{1,2})월", text)
+    return int(m.group(1)) if m else None
+
+def build_fish_buttons(fishes):
+    buttons = []
+    for f in fishes[:MAX_QR]:
+        buttons.append({"label": display_name(f), "action": "message", "messageText": display_name(f)})
+    return buttons
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    # 프로덕션 권장: gunicorn -w 4 -k gthread -b 0.0.0.0:$PORT app:app
     app.run(host="0.0.0.0", port=port)
 
 
