@@ -1,15 +1,13 @@
 # TAC_data.py
-# TAC 대상 어종/업종/선적지 메타데이터 (변하지 않는 정적 정보)
+# TAC 대상 어종/업종/선적지 "정적 메타데이터" 관리
 
 from typing import Dict, List
 
-# 표준 어종 키는 fish_utils.normalize_fish_name() 결과와 동일하게 관리하세요.
-# display/aliases는 사용자 입력 보정 및 표기를 위한 용도입니다.
 TAC_DATA: Dict[str, dict] = {
     # ── 예시: 살오징어 ────────────────────────────────────────────────────────
     "살오징어": {
         "display": "살오징어",
-        "aliases": ["살오징어(오징어)"],
+        "aliases": ["살오징어(오징어)"],  # 사용자 입력 보정용
         "industries": {
             "근해채낚기": {
                 "ports": ["부산", "울산", "강원", "경북", "경남", "제주", "전남", "충남"],
@@ -23,19 +21,12 @@ TAC_DATA: Dict[str, dict] = {
         },
     },
 
-    # ── 확장: 꽃게/고등어 등 TAC 대상 어종을 여기에 추가 ─────────────
-    # "꽃게": {
-    #   "display": "꽃게",
-    #   "aliases": [],
-    #   "industries": {
-    #       "연안자망": {"ports": ["부산", ...]},
-    #       ...
-    #   }
-    # },
+    # ── 향후 확장: 꽃게/고등어 등 추가 ───────────────────────────────────────
+    # "꽃게": { "display":"꽃게", "aliases":[], "industries":{ ... } },
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 헬퍼 함수 (앱에서 이 함수들만 사용하면 구조가 안 꼬입니다)
+# 헬퍼
 # ──────────────────────────────────────────────────────────────────────────────
 def is_tac_species(fish_norm: str) -> bool:
     return fish_norm in TAC_DATA
@@ -65,3 +56,4 @@ def all_ports_union() -> List[str]:
         for ind in sp.get("industries", {}).values():
             s.update(ind.get("ports", []))
     return sorted(s)
+

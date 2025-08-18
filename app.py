@@ -17,7 +17,7 @@ from TAC_data import (
     all_ports_union,
 )
 
-# 운영 데이터 접근
+# 운영 데이터
 from TAC_data_sources import (
     get_weekly_report,
     get_depletion_rows,
@@ -34,11 +34,10 @@ logger = logging.getLogger(__name__)
 KST = timezone(timedelta(hours=9))
 MAX_QR = 10
 
-# 일반 어종용 표시명(비-TAC)
 display_name_map = {
     "조피볼락(우럭)": "조피볼락",
     "넙치(광어)": "넙치",
-    "살오징어(오징어)": "살오징어",  # normalize 대비
+    "살오징어(오징어)": "살오징어",
     "전복(전복류)": "전복",
     "제주소라": "제주소라",
 }
@@ -65,31 +64,49 @@ _MONTH_END = {m: calendar.monthrange(2024, m)[1] for m in range(1, 13)}
 # ──────────────────────────────────────────────────────────────────────────────
 # 공용 유틸
 # ──────────────────────────────────────────────────────────────────────────────
-def display_name(fish_norm: str) -> str:
-    """TAC 대상이면 TAC 표시명, 아니면 일반 표시명."""
-    return tac_display(fish_norm) if is_tac_species(fish_norm) else display_name_map.get(fish_norm, fish_norm)
-
-def get_emoji(name: str) -> str:
-    return fish_emojis.get(name, "🐟")
-
 def cap_quick_replies(buttons): return (buttons or [])[:MAX_QR]
 
 def build_response(text, buttons=None):
-    tpl = {"version": "2.0", "template": {"outputs": [{"simpleText": {"text": text}}]}}
+    tpl = {"version":"2.0","template":{"outputs":[{"simpleText":{"text":text}}]}}
     if buttons: tpl["template"]["quickReplies"] = cap_quick_replies(buttons)
     return tpl
 
 def fmt_num(v):
     if v is None: return "-"
     if isinstance(v, (int, float)):
-        return f"{v:,.1f}" if (isinstance(v, float) and v != int(v)) else f"{int(v):,}"
+        return f"{v:,.1f}" if (isinstance(v,float) and v != int(v)) else f"{int(v):,}"
     return str(v)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# TAC 관련 버튼/파서
+# TAC 키 해결(핵심 보강)
+# ──────────────────────────────────────────────────────────────────────────────
+def resolve_tac_key(fish_norm: str):
+    """
+    normalize_fish_name() 결과(예: '살오징어(오징어)')를
+    TAC_DATA 표준 키(예: '살오징어')로 매핑.
+    """
+    if is_tac_species(fish_norm):
+        return fish_norm
+    # display/aliases 매칭
+    for sp, meta in TAC_DATA.items():
+        disp = meta.get("display")
+        aliases = set(meta.get("aliases", []))
+        if fish_norm == sp or fish_norm == disp or fish_norm in aliases:
+            return sp
+    return None
+
+def display_name(fish_norm: str) -> str:
+    sp = resolve_tac_key(fish_norm)
+    if sp: return tac_display(sp)
+    return display_name_map.get(fish_norm, fish_norm)
+
+def get_emoji(name: str) -> str:
+    return fish_emojis.get(name, "🐟")
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TAC 버튼/파서
 # ──────────────────────────────────────────────────────────────────────────────
 def is_tac_list_request(text: str):
-    """'TAC 살오징어' / '살오징어 TAC'"""
     if not text: return None
     t = text.strip()
     m1 = re.match(r"^TAC\s+(.+)$", t, re.IGNORECASE)
@@ -98,35 +115,38 @@ def is_tac_list_request(text: str):
     return normalize_fish_name(target) if target else None
 
 def build_tac_entry_button_for(fish_norm: str):
-    if is_tac_species(fish_norm):
-        return [{"label": "🚢 TAC 업종", "action": "message", "messageText": f"TAC {display_name(fish_norm)}"}]
+    sp = resolve_tac_key(fish_norm)
+    if sp:
+        return [{"label":"🚢 TAC 업종","action":"message","messageText":f"TAC {display_name(sp)}"}]
     return []
 
 def build_tac_industry_buttons(fish_norm: str):
-    inds = get_industries(fish_norm)
-    disp_fish = display_name(fish_norm)
+    sp = resolve_tac_key(fish_norm) or fish_norm
+    inds = get_industries(sp)
+    disp_fish = display_name(sp)
     return [{"label": ind, "action": "message", "messageText": f"{disp_fish} {ind}"} for ind in inds[:MAX_QR]]
 
 def build_port_buttons(fish_norm: str, industry: str):
-    ports = get_ports(fish_norm, industry)
-    disp = display_name(fish_norm)
+    sp = resolve_tac_key(fish_norm) or fish_norm
+    ports = get_ports(sp, industry)
+    disp = display_name(sp)
     return [{"label": p, "action": "message", "messageText": f"{disp} {industry} {p}"} for p in ports[:MAX_QR]]
 
 def build_port_detail_buttons(fish_norm: str, industry: str, port: str):
-    disp = display_name(fish_norm)
-    siblings = [p for p in get_ports(fish_norm, industry) if p != port]
+    sp = resolve_tac_key(fish_norm) or fish_norm
+    disp = display_name(sp)
+    siblings = [p for p in get_ports(sp, industry) if p != port]
     buttons = [
-        {"label": "📈 소진현황",      "action": "message", "messageText": f"{disp} {industry} {port} 소진현황"},
-        {"label": "📅 주간별 어획량", "action": "message", "messageText": f"{disp} {industry} {port} 주간별 어획량"},
-        {"label": "🗂 전체기간 어획량","action": "message", "messageText": f"{disp} {industry} {port} 전체기간 어획량"},
-        {"label": "◀︎ 선적지 목록",   "action": "message", "messageText": f"{disp} {industry}"},
+        {"label":"📈 소진현황","action":"message","messageText":f"{disp} {industry} {port} 소진현황"},
+        {"label":"📅 주간별 어획량","action":"message","messageText":f"{disp} {industry} {port} 주간별 어획량"},
+        {"label":"🗂 전체기간 어획량","action":"message","messageText":f"{disp} {industry} {port} 전체기간 어획량"},
+        {"label":"◀︎ 선적지 목록","action":"message","messageText":f"{disp} {industry}"},
     ]
     for p in siblings[:max(0, MAX_QR - len(buttons))]:
-        buttons.append({"label": p, "action": "message", "messageText": f"{disp} {industry} {p}"})
+        buttons.append({"label": p, "action":"message", "messageText": f"{disp} {industry} {p}"})
     return buttons
 
 def parse_tac_dual(text: str):
-    """'살오징어 근해채낚기' → (fish_norm, industry)"""
     if not text: return None
     t = text.strip()
     all_inds = set(all_industries_union())
@@ -134,16 +154,12 @@ def parse_tac_dual(text: str):
         if t.endswith(industry):
             fish_part = t[:-len(industry)].strip()
             fish_norm = normalize_fish_name(fish_part)
-            if is_tac_species(fish_norm) and industry in get_industries(fish_norm):
-                return fish_norm, industry
-            # display 표기일 수 있음
-            for sp, meta in TAC_DATA.items():
-                if meta.get("display") == fish_part and industry in get_industries(sp):
-                    return sp, industry
+            sp = resolve_tac_key(fish_norm) or resolve_tac_key(fish_part)
+            if sp and industry in get_industries(sp):
+                return sp, industry
     return None
 
 def parse_tac_triplet(text: str):
-    """'살오징어 근해채낚기 부산' → (fish_norm, industry, port)"""
     if not text: return None
     t = text.strip()
     for port in sorted(all_ports_union(), key=len, reverse=True):
@@ -151,9 +167,9 @@ def parse_tac_triplet(text: str):
             left = t[:-len(port)].strip()
             duo = parse_tac_dual(left)
             if duo:
-                fish_norm, industry = duo
-                if port in get_ports(fish_norm, industry):
-                    return fish_norm, industry, port
+                sp, industry = duo
+                if port in get_ports(sp, industry):
+                    return sp, industry, port
     return None
 
 def parse_detail_intent(text: str):
@@ -289,8 +305,7 @@ def render_catch_timeseries(fish_norm, industry, port, ts, mode="weekly"):
         lines = [f"📅 {disp} {industry} — {port} 주간별 어획량", ""]
         for row in ts.get("weekly", [])[:12]:
             wk = row.get("week_ending"); val = row.get("오징어")
-            if val is not None:
-                lines.append(f"- {wk}: {fmt_num(val)} kg")
+            if val is not None: lines.append(f"- {wk}: {fmt_num(val)} kg")
         return "\n".join(lines) if len(lines) > 2 else f"📅 {disp} {industry} — {port} 주간별 어획량\n\n데이터가 없습니다."
     else:
         total = ts.get("season_total", {})
@@ -302,7 +317,7 @@ def render_catch_timeseries(fish_norm, industry, port, ts, mode="weekly"):
         return "\n".join(lines)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 도움말/금어기 유틸
+# 도움말/금어기
 # ──────────────────────────────────────────────────────────────────────────────
 HELP_TEXT = (
     "🧭 사용 방법\n"
@@ -322,20 +337,21 @@ def fishbot():
         user_text = (req.get("userRequest", {}).get("utterance") or "").strip()
         today = datetime.now(KST)
 
-        # 0) 도움말
+        # 도움말
         if "도움말" in user_text:
             return jsonify(build_response(HELP_TEXT, buttons=BASE_MENU))
 
-        # 1) 오늘 금어기
+        # 오늘 금어기
         if is_today_ban_query(user_text):
             fishes = today_banned_fishes_cached(today.month, today.day)
             if not fishes:
                 return jsonify(build_response(f"📅 오늘({today.month}월 {today.day}일) 금어기 어종은 없습니다.", buttons=BASE_MENU))
             lines = [f"📅 오늘({today.month}월 {today.day}일) 금어기 어종:"]
             lines += [f"- {get_emoji(n)} {display_name(n)}" for n in fishes]
-            return jsonify(build_response("\n".join(lines), buttons=[{"label": display_name(n), "action": "message", "messageText": display_name(n)} for n in fishes[:MAX_QR]]))
+            buttons = [{"label": display_name(n), "action":"message", "messageText": display_name(n)} for n in fishes[:MAX_QR]]
+            return jsonify(build_response("\n".join(lines), buttons=buttons))
 
-        # 2) 월 금어기
+        # 월 금어기
         m = extract_month_query(user_text)
         if m is not None:
             result = []
@@ -348,10 +364,11 @@ def fishbot():
                 return jsonify(build_response(f"📅 {m}월 금어기 어종은 없습니다.", buttons=BASE_MENU))
             lines = [f"📅 {m}월 금어기 어종:"]
             lines += [f"- {get_emoji(n)} {display_name(n)}" for n in result]
-            return jsonify(build_response("\n".join(lines), buttons=[{"label": display_name(n), "action": "message", "messageText": display_name(n)} for n in result[:MAX_QR]]))
+            buttons = [{"label": display_name(n), "action":"message", "messageText": display_name(n)} for n in result[:MAX_QR]]
+            return jsonify(build_response("\n".join(lines), buttons=buttons))
 
-        # 3) 가장 구체적 입력부터 처리
-        # 3-A) <어종> <업종> <선적지> (+세부 의도)
+        # ── 구체적 입력 우선 ──────────────────────────────────────────────────
+        # <어종> <업종> <선적지> (+세부 의도)
         trip = parse_tac_triplet(user_text)
         if trip:
             fish_norm, industry, port = trip
@@ -374,7 +391,7 @@ def fishbot():
             text = render_weekly_report(fish_norm, industry, port, data)
             return jsonify(build_response(text, buttons=build_port_detail_buttons(fish_norm, industry, port)))
 
-        # 3-B) <어종> <업종> → 선적지 목록
+        # <어종> <업종> → 선적지 목록
         duo = parse_tac_dual(user_text)
         if duo:
             fish_norm, industry = duo
@@ -383,21 +400,24 @@ def fishbot():
             lines += ports + ["", "아래 버튼을 눌러주세요."]
             return jsonify(build_response("\n".join(lines), buttons=build_port_buttons(fish_norm, industry)))
 
-        # 3-C) TAC <어종> → 업종 목록
+        # TAC <어종> → 업종 목록
         tac_target = is_tac_list_request(user_text)
-        if tac_target and is_tac_species(tac_target):
-            inds = get_industries(tac_target)
-            lines = [f"🚢 {display_name(tac_target)} TAC 업종 🚢", ""]
-            lines += inds + ["", "자세한 내용은 버튼을 눌러주십시오."]
-            return jsonify(build_response("\n".join(lines), buttons=build_tac_industry_buttons(tac_target)))
+        if tac_target:
+            sp = resolve_tac_key(tac_target)
+            if sp:
+                inds = get_industries(sp)
+                lines = [f"🚢 {display_name(sp)} TAC 업종 🚢", ""]
+                lines += inds + ["", "자세한 내용은 버튼을 눌러주십시오."]
+                return jsonify(build_response("\n".join(lines), buttons=build_tac_industry_buttons(sp)))
+            else:
+                return jsonify(build_response(f"'{display_name(tac_target)}' TAC 업종 정보가 없습니다.", buttons=BASE_MENU))
 
-        # 4) 특정 어종 상세 (일반)
+        # 특정 어종 상세
         fish_norm = normalize_fish_name(user_text)
         if fish_norm in fish_data:
             text, _ = get_fish_info(fish_norm, fish_data)
-            tac_btns = build_tac_entry_button_for(fish_norm)
-            # 요청사항: 어종 상세에는 기본 메뉴 버튼을 붙이지 않음
-            return jsonify(build_response(text, buttons=tac_btns))
+            tac_btns = build_tac_entry_button_for(fish_norm)  # resolve_tac_key 내부 적용
+            return jsonify(build_response(text, buttons=tac_btns))  # 기본 메뉴 붙이지 않음
 
         # 폴백
         return jsonify(build_response("제가 할 수 있는 일이 아니에요.", buttons=BASE_MENU))
@@ -415,6 +435,7 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     # 프로덕션 권장: gunicorn -w 4 -k gthread -b 0.0.0.0:$PORT app:app
     app.run(host="0.0.0.0", port=port)
+
 
 
 
