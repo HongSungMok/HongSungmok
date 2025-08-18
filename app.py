@@ -92,9 +92,9 @@ INDUSTRY_PORTS = {
 }
 
 def build_tac_entry_button_for(fish_norm: str):
-    """살오징어면 [📊 TAC 업종] 버튼 하나만 노출"""
+    """살오징어면 [🚢 TAC 업종] 버튼 하나만 노출"""
     if fish_norm in TAC_INDUSTRY_MAP:
-        return [{"label": "📊 TAC 업종", "action": "message", "messageText": f"TAC {get_display_name(fish_norm)}"}]
+        return [{"label": "🚢 TAC 업종", "action": "message", "messageText": f"TAC {get_display_name(fish_norm)}"}]
     return []
 
 def is_tac_list_request(text: str):
@@ -422,7 +422,7 @@ def fishbot():
 
         text, fish_buttons = get_fish_info(fish_norm, fish_data)
 
-        # 살오징어면 '📊 TAC 업종' 버튼 하나만 노출
+        # 살오징어면 '🚢 TAC 업종' 버튼 하나만 노출
         tac_entry = build_tac_entry_button_for(fish_norm)
         if tac_entry:
             return jsonify(build_response(text, buttons=tac_entry))
