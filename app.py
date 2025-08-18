@@ -484,23 +484,45 @@ def fishbot():
                 inds = get_industries(sp)
                 lines = [f"🚢 {display_name(sp)} TAC 업종 🚢", ""]
                 lines += inds + ["", "자세한 내용은 버튼을 눌러주십시오."]
-                return jsonify(build_response("\n".join(lines), buttons=build_tac_industry_buttons(sp)))
+                return jsonify(
+                    build_response(
+                        "\n".join(lines),
+                        buttons=build_tac_industry_buttons(sp)
+                    )
+                )
             else:
-                return jsonify(build_response(f"'{display_name(tac_target)}' TAC 업종 정보가 없습니다.", buttons=BASE_MENU))
+                return jsonify(
+                    build_response(
+                        f"'{display_name(tac_target)}' TAC 업종 정보가 없습니다.",
+                        buttons=BASE_MENU
+                    )
+                )
 
-        # ④ 특정 어종 상세 (※ BASE_MENU 제거, TAC 버튼만 필요 시 노출)
+        # ④ 특정 어종 상세
         fish_norm = normalize_fish_name(user_text)
-        if fish_norm in fish_data:
-            text, _btns_ignored = get_fish_info(fish_norm)   # ← fish_data 제거됨
-            tac_btns = build_tac_entry_button_for(fish_norm)
-            return jsonify(build_response(text, buttons=(tac_btns or None)))
+
+        # 금어기/금지체장 등 정보 텍스트 생성
+        text, _btns_ignored = get_fish_info(fish_norm)
+
+        # TAC 버튼 생성
+        tac_btns = build_tac_entry_button_for(fish_norm)
+
+        # 버튼 구성: TAC 대상이면 TAC 버튼, 아니면 기본 메뉴
+        if tac_btns:
+            return jsonify(build_response(text, buttons=tac_btns))
+        else:
+            return jsonify(build_response(text, buttons=BASE_MENU))
 
         # 폴백
-        return jsonify(build_response("제가 할 수 있는 일이 아니에요.", buttons=BASE_MENU))
+        return jsonify(
+            build_response("제가 할 수 있는 일이 아니에요.", buttons=BASE_MENU)
+        )
 
     except Exception as e:
         logger.error(f"[ERROR] fishbot error: {e}", exc_info=True)
-        return jsonify(build_response("⚠️ 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", buttons=BASE_MENU))
+        return jsonify(
+            build_response("⚠️ 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", buttons=BASE_MENU)
+        )
 
 # 헬스체크
 @app.route("/healthz", methods=["GET"])
