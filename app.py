@@ -480,9 +480,8 @@ def fishbot():
         # ④ 특정 어종 상세 (※ BASE_MENU 제거, TAC 버튼만 필요 시 노출)
         fish_norm = normalize_fish_name(user_text)
         if fish_norm in fish_data:
-            # ⚠️ 함수 시그니처: get_fish_info(fish_name: str, fish_data: dict)
-            text, _btns_ignored = get_fish_info(fish_norm, fish_data)
-            tac_btns = build_tac_entry_button_for(fish_norm)  # 필요 시만 노출
+            text, _btns_ignored = get_fish_info(fish_norm)   # ← fish_data 제거됨
+            tac_btns = build_tac_entry_button_for(fish_norm)
             return jsonify(build_response(text, buttons=(tac_btns or None)))
 
         # 폴백
