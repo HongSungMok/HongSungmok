@@ -57,6 +57,66 @@ _PUNCT_RE = re.compile(r"[~!@#\$%\^&\*\(\)\-\_\+\=\[\]\{\}\|\\;:'\",\.<>\/\?·�
 _MONTH_END = {m: calendar.monthrange(2024, m)[1] for m in range(1, 13)}
 
 # ──────────────────────────────────────────────────────────────────────────────
+# TAC 업종/선적지(살오징어 전용)
+# ──────────────────────────────────────────────────────────────────────────────
+TAC_INDUSTRY_MAP = {
+    # normalize_fish_name() 결과 키를 포괄적으로 커버
+    "살오징어(오징어)": [
+        "근해채낚기",
+        "동해구중형트롤",
+        "대형트롤",
+        "대형선망",
+        "쌍끌이대형저인망",
+        "근해자망",
+        "서남해구쌍끌이중형저인망",
+    ],
+    "살오징어": [
+        "근해채낚기",
+        "동해구중형트롤",
+        "대형트롤",
+        "대형선망",
+        "쌍끌이대형저인망",
+        "근해자망",
+        "서남해구쌍끌이중형저인망",
+    ],
+}
+
+INDUSTRY_PORTS = {
+    "근해채낚기": ["부산", "울산", "강원", "경북", "경남", "제주", "전남", "충남"],
+    "대형선망": ["부산", "경남"],
+    "대형트롤": ["부산", "경남", "전남"],
+    "동해구중형트롤": ["강원", "경북"],
+    "근해자망": ["부산", "인천", "울산", "충남", "전북", "전남", "경북", "경남", "제주"],
+    "쌍끌이대형저인망": ["부산", "인천", "전남", "경남"],
+    "서남해구쌍끌이중형저인망": ["경남", "전남"],
+}
+
+def build_tac_entry_button_for(fish_norm: str):
+    """살오징어면 [📊 TAC 업종] 버튼 하나만 노출"""
+    if fish_norm in TAC_INDUSTRY_MAP:
+        return [{"label": "📊 TAC 업종", "action": "message", "messageText": f"TAC {get_display_name(fish_norm)}"}]
+    return []
+
+def is_tac_list_request(text: str):
+    """'TAC 살오징어' 또는 '살오징어 TAC' 트리거 감지"""
+    if not text:
+        return None
+    t = (text or "").strip()
+    m1 = re.match(r"^TAC\s+(.+)$", t, flags=re.IGNORECASE)
+    m2 = re.match(r"^(.+)\s+TAC$", t, flags=re.IGNORECASE)
+    target = (m1.group(1).strip() if m1 else (m2.group(1).strip() if m2 else None))
+    if not target:
+        return None
+    return normalize_fish_name(target)
+
+def is_industry_select(text: str):
+    """업종 버튼 선택 여부 판단 (정확 일치)"""
+    if not text:
+        return None
+    t = (text or "").strip()
+    return t if t in INDUSTRY_PORTS else None
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 유틸
 # ──────────────────────────────────────────────────────────────────────────────
 def get_display_name(name: str) -> str:
@@ -227,7 +287,6 @@ def fishbot():
             lines = [f"📅 오늘({today.month}월 {today.day}일) 금어기 어종:"]
             for name in fishes:
                 lines.append(f"- {get_emoji(name)} {get_display_name(name)}")
-            # 상황 버튼(어종) + 기본 메뉴 병합
             buttons = merge_buttons(build_fish_buttons(fishes))
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
@@ -258,15 +317,52 @@ def fishbot():
             buttons = merge_buttons(build_fish_buttons(result))
             return jsonify(build_response("\n".join(lines), buttons=buttons))
 
+        # 2.5) TAC 업종 목록: "TAC 살오징어" / "살오징어 TAC"
+        tac_target = is_tac_list_request(user_text)
+        if tac_target:
+            if tac_target in TAC_INDUSTRY_MAP:
+                industries = TAC_INDUSTRY_MAP[tac_target]
+                # 요구한 포맷 그대로 텍스트 구성 (BASE_MENU 합치지 않음)
+                lines = [f"📊 {get_display_name(tac_target)} TAC 업종"]
+                lines.extend(industries)
+                lines.append("아래 버튼을 눌러주세요")
+                tac_buttons = [{"label": n, "action": "message", "messageText": n} for n in industries[:MAX_QR]]
+                return jsonify(build_response("\n".join(lines), buttons=tac_buttons))
+            else:
+                return jsonify(build_response(
+                    f"'{get_display_name(tac_target)}' TAC 업종 정보가 없습니다."
+                ))
+
+        # 2.6) 업종 선택 후 선적지 화면
+        selected_industry = is_industry_select(user_text)
+        if selected_industry:
+            ports = INDUSTRY_PORTS.get(selected_industry, [])
+            lines = [
+                "🧭 선적지 선택",
+                f"업종: {selected_industry}",
+            ]
+            if ports:
+                lines.extend(ports)
+                lines.append("아래 버튼을 눌러주세요")
+            else:
+                lines.append("등록된 선적지가 없습니다.")
+            port_buttons = [{"label": p, "action": "message", "messageText": p} for p in ports[:MAX_QR]]
+            return jsonify(build_response("\n".join(lines), buttons=port_buttons))
+
         # 3) 특정 어종 정보
         fish_norm = normalize_fish_name(user_text)
         logger.info(f"[DEBUG] 정규화된 어종명: {fish_norm}")
         logger.info(f"[DEBUG] fish_data에 존재?: {'있음' if fish_norm in fish_data else '없음'}")
 
         text, fish_buttons = get_fish_info(fish_norm, fish_data)
-        # 상황 버튼 + 기본 메뉴 병합
-        buttons = merge_buttons(fish_buttons)
 
+        # ⭐ 살오징어면 '📊 TAC 업종' 버튼 하나만 노출
+        tac_entry = build_tac_entry_button_for(fish_norm)
+        if tac_entry:
+            return jsonify(build_response(text, buttons=tac_entry))
+
+        # 살오징어 외에는 기존 버튼 + 기본 메뉴 병합
+        buttons = merge_buttons(fish_buttons)
         return jsonify(build_response(text, buttons))
 
     except Exception as e:
