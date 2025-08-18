@@ -381,7 +381,7 @@ def render_season_vessel_catch(fish_norm, industry, port, rows, ref_date=None):
     if not rows:
         return f"🗂 {disp} {industry} — {port} 전체기간 어획량\n{label}\n\n데이터 준비중입니다."
 
-    lines = ["전체기간 어획량", "(25~26어기)", ""]
+    lines = [f"🗂{port} 전체기간 어획량", "(25~26어기)", ""]
     for r in rows:
         lines.append(
             f"⚓{r.get('선명')}\n"
