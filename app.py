@@ -159,15 +159,33 @@ def build_port_buttons(fish_norm: str, industry: str):
     return [{"label": p, "action": "message", "messageText": f"{disp} {industry} {p}"} for p in ports[:MAX_QR]]
 
 def build_port_detail_buttons(fish_norm: str, industry: str, port: str):
-    """선적지 상세 버튼: 요청한 포트의 세부 기능만 노출 (다른 포트 버튼 제거)."""
     sp = resolve_tac_key(fish_norm) or fish_norm
     disp = display_name(sp)
+
+    # 항상 "<어종> <업종> <선적지> <의도>" 형태로 붙여줌
     buttons = [
-        {"label":"📈 소진현황","action":"message","messageText":f"{disp} {industry} {port} 소진현황"},
-        {"label":"📅 주간별 어획량","action":"message","messageText":f"{disp} {industry} {port} 주간별 어획량"},
-        {"label":"🗂 전체기간 어획량","action":"message","messageText":f"{disp} {industry} {port} 전체기간 어획량"},
-        {"label":"◀︎ 선적지 목록","action":"message","messageText":f"{disp} {industry}"},
+        {
+            "label": "📈 소진현황",
+            "action": "message",
+            "messageText": f"{disp} {industry} {port} 소진현황",
+        },
+        {
+            "label": "📅 주간별 어획량",
+            "action": "message",
+            "messageText": f"{disp} {industry} {port} 주간별 어획량",
+        },
+        {
+            "label": "🗂 전체기간 어획량",
+            "action": "message",
+            "messageText": f"{disp} {industry} {port} 전체기간 어획량",
+        },
+        {
+            "label": "◀︎ 선적지 목록",
+            "action": "message",
+            "messageText": f"{disp} {industry}",
+        },
     ]
+
     return buttons
 
 def parse_tac_dual(text: str):
